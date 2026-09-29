@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { CalendarDays, Filter, Search } from '@lucide/vue'
 import { z } from 'zod'
+import AppDatePicker from '../../../components/ui/AppDatePicker.vue'
 import PurchaseJournalDetail from './PurchaseJournalDetail.vue'
 import PurchaseJournalTable from './PurchaseJournalTable.vue'
 import { currentMonthRange, samplePurchaseJournalEntries, type PurchaseJournalEntry } from './purchaseJournalData'
@@ -104,10 +105,8 @@ function toggleAll() {
       <aside class="journal-filters" :class="{ 'journal-filters--open': filtersOpen }" aria-label="Date filters">
         <div class="journal-filters__heading"><CalendarDays :size="17" aria-hidden="true" /><h2>Date range</h2></div>
         <form @submit.prevent="loadRange">
-          <label for="journal-from">From <span aria-hidden="true">*</span></label>
-          <input id="journal-from" v-model="fromDate" type="date" required :aria-invalid="Boolean(dateError)" />
-          <label for="journal-to">To <span aria-hidden="true">*</span></label>
-          <input id="journal-to" v-model="toDate" type="date" required :aria-invalid="Boolean(dateError)" />
+          <AppDatePicker id="journal-from" v-model="fromDate" label="From" required :invalid="Boolean(dateError)" />
+          <AppDatePicker id="journal-to" v-model="toDate" label="To" required :invalid="Boolean(dateError)" />
           <p v-if="dateError" class="journal-filters__error" role="alert">{{ dateError }}</p>
           <button class="journal-button journal-button--primary journal-filters__load" type="submit">Load</button>
         </form>
