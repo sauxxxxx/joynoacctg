@@ -3,6 +3,11 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppSidebar from './components/AppSidebar.vue'
 import AppTopbar from './components/AppTopbar.vue'
 import PurchaseJournalPage from './features/accounting/journals/PurchaseJournalPage.vue'
+import CustomersPage from './features/sales/customers/CustomersPage.vue'
+import SalesDocumentsPage from './features/sales/SalesDocumentsPage.vue'
+import SalesReportsPage from './features/sales/SalesReportsPage.vue'
+import SalesSetupPage from './features/sales/SalesSetupPage.vue'
+import type { DocumentKind, SetupKind } from './features/sales/salesPreviewStore'
 import { findPage } from './navigation'
 
 const activeId = ref('dashboard')
@@ -10,6 +15,13 @@ const sidebarCollapsed = ref(false)
 const mobileOpen = ref(false)
 const isMobile = ref(false)
 const activePage = computed(() => findPage(activeId.value) ?? findPage('dashboard')!)
+const documentIds: DocumentKind[] = ['sales-invoices', 'sales-receipts', 'acknowledgement-receipts']
+const setupIds: SetupKind[] = ['sales-payment-terms', 'sales-payment-methods', 'sales-discount-types']
+const reportIds = ['receivable-schedule', 'receivable-aging'] as const
+const documentPageId = computed(() => documentIds.find((id) => id === activeId.value))
+const setupPageId = computed(() => setupIds.find((id) => id === activeId.value))
+const reportPageId = computed(() => reportIds.find((id) => id === activeId.value))
+const isSalesPage = computed(() => activeId.value === 'customers' || Boolean(documentPageId.value || setupPageId.value || reportPageId.value))
 
 function syncViewport() {
   isMobile.value = window.matchMedia('(max-width: 900px)').matches
@@ -75,7 +87,7 @@ onBeforeUnmount(() => {
     <div class="app-shell__body" :inert="mobileOpen">
       <AppTopbar :collapsed="sidebarCollapsed" :is-mobile="isMobile" @toggle-sidebar="toggleSidebar" @select="selectPage" />
       <main id="main-content" class="page-content" :class="{ 'page-content--journal': activeId === 'purchase-journal' }" tabindex="-1">
-        <div class="page-content__heading">
+        <div v-if="!isSalesPage" class="page-content__heading">
           <nav v-if="activePage.path.length > 1" class="breadcrumbs" aria-label="Breadcrumb">
             <template v-for="(part, index) in activePage.path" :key="`${part}-${index}`">
               <span v-if="index > 0" class="breadcrumbs__divider">/</span><span :class="{ 'breadcrumbs__current': index === activePage.path.length - 1 }">{{ part }}</span>
@@ -85,6 +97,10 @@ onBeforeUnmount(() => {
         </div>
         <div class="page-content__canvas">
           <PurchaseJournalPage v-if="activeId === 'purchase-journal'" />
+          <CustomersPage v-else-if="activeId === 'customers'" />
+          <SalesDocumentsPage v-else-if="documentPageId" :page-id="documentPageId" />
+          <SalesSetupPage v-else-if="setupPageId" :page-id="setupPageId" />
+          <SalesReportsPage v-else-if="reportPageId" :page-id="reportPageId" />
         </div>
       </main>
     </div>
