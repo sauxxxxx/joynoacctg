@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Download, Plus, Search, Trash2, Upload, X } from '@lucide/vue'
+import AppDatePicker from '../../components/ui/AppDatePicker.vue'
 import { customers } from './customers/customerPreviewStore'
 import { downloadInvoiceSheet, readInvoiceSheet } from './invoiceSpreadsheet'
 import { salesDocuments, setupRecords, type SalesDocument, type SalesLineItem } from './salesPreviewStore'
@@ -98,10 +99,9 @@ async function importExcel(event: Event) {
 
 <template>
   <section class="sales-page" aria-label="Add multiple invoices">
-    <p class="sales-preview-note">Download the Excel template, then upload it to add invoice rows.</p>
     <div class="sales-panel">
       <div class="sales-panel__toolbar">
-        <div><h2>New invoices</h2><p>Add several draft invoices at once.</p></div>
+        <div><h2>New invoices</h2><p>Add rows here, or fill in the Excel template and upload it.</p></div>
         <div class="sales-panel__actions sales-panel__actions--bulk">
           <label class="sales-search"><Search :size="16" aria-hidden="true" /><input v-model="query" type="search" placeholder="Type to filter" aria-label="Search staged invoices" /></label>
           <button class="sales-button" type="button" @click="addRow"><Plus :size="16" /> Add row</button>
@@ -116,7 +116,7 @@ async function importExcel(event: Event) {
         <table class="sales-table sales-bulk-table"><thead><tr><th>Invoice #</th><th>Date</th><th>Customer</th><th>Payment Term</th><th>Item</th><th>Quantity</th><th>Unit Price</th><th>Actions</th></tr></thead>
           <tbody><tr v-for="row in visibleRows" :key="row.id">
             <td><input v-model="row.number" aria-label="Invoice number" maxlength="40" /></td>
-            <td><input v-model="row.date" aria-label="Invoice date" type="date" /></td>
+            <td><AppDatePicker :id="`bulk-date-${row.id}`" v-model="row.date" label="Invoice date" /></td>
             <td><select v-model="row.customerId" aria-label="Customer"><option value="">Select customer</option><option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select></td>
             <td><select v-model="row.paymentTermId" aria-label="Payment term"><option value="">None</option><option v-for="term in terms" :key="term.id" :value="term.id">{{ term.name }}</option></select></td>
             <td><input v-model="row.item" aria-label="Item" maxlength="160" /></td>

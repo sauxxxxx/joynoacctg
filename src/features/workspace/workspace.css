@@ -110,7 +110,7 @@
 .ws-field__prefix > input { border-radius: 0 5px 5px 0 !important; }
 .ws-form-error { margin: 0; padding: 9px 11px; border-radius: 5px; background: #fdf0f1; color: #9b303a; font-size: 12px; }
 
-.ws-dialog { width: min(620px, calc(100vw - 32px)); max-height: min(90vh, 820px); padding: 0; overflow-y: auto; border: 1px solid #e1e5e7; border-radius: 10px; box-shadow: 0 24px 70px rgba(20, 30, 40, .18); color: var(--ink); }
+.ws-dialog { margin: auto; width: min(620px, calc(100vw - 32px)); max-height: min(90vh, 820px); padding: 0; overflow-y: auto; border: 1px solid #e1e5e7; border-radius: 10px; box-shadow: 0 24px 70px rgba(20, 30, 40, .18); color: var(--ink); }
 .ws-dialog::backdrop { background: rgba(20, 29, 36, .45); }
 .ws-dialog--wide { width: min(860px, calc(100vw - 32px)); }
 .ws-dialog--small { width: min(420px, calc(100vw - 32px)); }
@@ -131,7 +131,7 @@
 .ws-date-control__indicator { position: absolute; top: 5px; right: 5px; width: 5px; height: 5px; border-radius: 50%; background: #467b9b; }
 .ws-date-filter { position: absolute; z-index: 30; top: calc(100% + 8px); right: 0; width: 300px; padding: 18px; border: 1px solid #d6dde1; border-radius: 7px; background: #fff; box-shadow: 0 12px 30px rgba(22, 30, 36, .16); text-align: left; }
 .ws-date-filter__heading { display: flex; align-items: center; gap: 9px; margin-bottom: 18px; color: #5a646d; }
-.ws-date-filter__heading h2 { margin: 0; color: #293138; font-size: 13px; font-weight: 650; }
+.ws-date-filter .ws-date-filter__heading h2 { margin: 0; color: #293138; font-size: 13px; font-weight: 650; letter-spacing: 0; }
 .ws-date-filter form { display: flex; flex-direction: column; }
 .ws-date-filter .ui-date-picker, .ws-date-filter .ui-select { margin-bottom: 15px; }
 .ws-date-filter__error { margin: -3px 0 13px; color: #b63838; font-size: 11px; line-height: 1.4; }

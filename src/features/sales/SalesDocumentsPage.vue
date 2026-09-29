@@ -3,9 +3,10 @@ import { computed, ref } from 'vue'
 import { Plus, Search, X } from '@lucide/vue'
 import { isAddOnEnabled, recordAudit } from '../company/companyStore'
 import { customers } from './customers/customerPreviewStore'
+import AppDatePicker from '../../components/ui/AppDatePicker.vue'
 import DateRangeFilter from '../workspace/DateRangeFilter.vue'
 import SalesBulkInvoices from './SalesBulkInvoices.vue'
-import { tableAmount } from './salesFormat'
+import { reportDate, tableAmount } from './salesFormat'
 import { salesDocuments, setupRecords, type DocumentKind, type SalesDocument, type SalesLineItem } from './salesPreviewStore'
 import './sales-pages.css'
 
@@ -105,7 +106,7 @@ function columnTotal(key: ColumnKey): number {
 function cellText(item: SalesDocument, key: ColumnKey): string {
   switch (key) {
     case 'number': return item.number
-    case 'date': return item.date
+    case 'date': return reportDate(item.date)
     case 'customer': return customerName(item.customerId)
     case 'paymentTerm': return termName(item.paymentTermId)
     case 'paymentMethod': return methodName(item.paymentMethodId)
@@ -239,12 +240,12 @@ function onBulkSaved(count: number) {
         <div class="sales-dialog__header"><h2>{{ draft.id ? 'Edit' : 'New' }} {{ isInvoice ? 'invoice' : isAcknowledgement ? 'acknowledgement receipt' : 'receipt' }}</h2><button type="button" aria-label="Close form" @click="dialog?.close()"><X :size="18" /></button></div>
         <div class="sales-form">
           <label>{{ isInvoice ? 'Invoice #' : isAcknowledgement ? 'AR#' : 'Collection Receipt #' }} <span>*</span><input v-model="draft.number" required maxlength="40" /></label>
-          <label>Date <span>*</span><input v-model="draft.date" type="date" required /></label>
+          <AppDatePicker id="sales-document-date" v-model="draft.date" label="Date" required />
           <label>Customer <span>*</span><select v-model="draft.customerId" required @change="fillCustomerDetails"><option value="" disabled>Select customer</option><option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select></label>
           <label>Status<select v-model="draft.status"><option>Draft</option><option v-if="isInvoice">Unpaid</option><option v-if="isInvoice">Paid</option><option v-if="!isInvoice">{{ isAcknowledgement ? 'Issued' : 'Posted' }}</option><option>Cancelled</option></select></label>
           <template v-if="isInvoice">
             <label>Payment Term<select v-model="draft.paymentTermId"><option value="">None</option><option v-for="term in terms" :key="term.id" :value="term.id">{{ term.name }}</option></select></label>
-            <label>Due Date<input v-model="draft.dueDate" type="date" :min="draft.date" /></label>
+            <AppDatePicker id="sales-document-due-date" v-model="draft.dueDate" label="Due Date" :min="draft.date" />
             <label>Payment Method<select v-model="draft.paymentMethodId"><option value="">None</option><option v-for="method in methods" :key="method.id" :value="method.id">{{ method.name }}</option></select></label>
           </template>
           <template v-else>

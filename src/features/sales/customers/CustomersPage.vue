@@ -4,6 +4,7 @@ import { Plus, Search, Trash2, X } from '@lucide/vue'
 import { recordAudit } from '../../company/companyStore'
 import { customers, type Customer } from './customerPreviewStore'
 import { salesDocuments } from '../salesPreviewStore'
+import '../sales-pages.css'
 import './customers.css'
 
 type StatusFilter = 'all' | 'active' | 'inactive'
@@ -122,34 +123,21 @@ function clearFilters() {
 </script>
 
 <template>
-  <section class="customers-page" aria-label="Customer management">
-    <div class="customers-page__intro">
-      <div>
-        <span class="customers-page__eyebrow">Sales setup</span>
-        <h2>Customers</h2>
-        <p>Keep customer names, tax identifiers, and contact details ready for sales documents.</p>
-      </div>
-      <button class="customer-button customer-button--primary" type="button" @click="openForm()">
-        <Plus :size="17" aria-hidden="true" /> Add customer
-      </button>
-    </div>
+  <section class="sales-page" aria-label="Customers">
+    <p v-if="feedback" class="sales-notice" role="status">{{ feedback }}</p>
 
-    <p v-if="feedback" class="customers-page__feedback" role="status">{{ feedback }}</p>
-
-    <div class="customer-panel">
-      <div class="customer-panel__toolbar">
-        <label class="customer-search">
-          <Search :size="17" aria-hidden="true" />
-          <input v-model="search" type="search" placeholder="Search customers" aria-label="Search customers" />
-        </label>
-        <label class="customer-filter">
-          <span>Status</span>
-          <select v-model="statusFilter" aria-label="Filter by status">
+    <div class="sales-panel">
+      <div class="sales-panel__toolbar">
+        <div><h2>Customers</h2><p>Keep customer names, tax identifiers, and contact details ready for sales documents.</p></div>
+        <div class="sales-panel__actions">
+          <label class="sales-search"><Search :size="16" aria-hidden="true" /><input v-model="search" type="search" placeholder="Type to filter" aria-label="Search customers" /></label>
+          <select v-model="statusFilter" class="sales-status-filter" aria-label="Filter by status">
             <option value="all">All statuses</option>
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
           </select>
-        </label>
+          <button class="sales-button sales-button--primary" type="button" @click="openForm()"><Plus :size="16" aria-hidden="true" /> Add customer</button>
+        </div>
       </div>
 
       <div class="customer-table-wrap">
@@ -157,7 +145,7 @@ function clearFilters() {
           <thead><tr><th scope="col">Name</th><th scope="col">TIN</th><th scope="col">Address</th><th scope="col">Tel No</th></tr></thead>
           <tbody>
             <tr v-for="customer in filteredCustomers" :key="customer.id" class="customer-table__row" @click="openForm(customer)">
-              <td data-label="Name"><button class="customer-table__link" type="button" :aria-label="`Open ${customer.name}`" @click.stop="openForm(customer)">{{ customer.name }}</button><small v-if="!customer.active">Inactive</small></td>
+              <td data-label="Name"><span><button class="customer-table__link" type="button" :aria-label="`Open ${customer.name}`" @click.stop="openForm(customer)">{{ customer.name }}</button><small v-if="!customer.active">Inactive</small></span></td>
               <td data-label="TIN">{{ customer.tin }}</td>
               <td data-label="Address">{{ customer.address }}</td>
               <td data-label="Tel No">{{ customer.phone }}</td>
@@ -179,7 +167,7 @@ function clearFilters() {
     <dialog ref="formDialog" class="customer-dialog" aria-labelledby="customer-dialog-title" @close="formError = ''">
       <form class="customer-form" @submit.prevent="saveCustomer">
         <div class="customer-dialog__header">
-          <div><span class="customers-page__eyebrow">Customer record</span><h2 id="customer-dialog-title">{{ editingId ? 'Edit customer' : 'Add customer' }}</h2></div>
+          <h2 id="customer-dialog-title">{{ editingId ? 'Edit customer' : 'Add customer' }}</h2>
           <button class="customer-dialog__close" type="button" aria-label="Close form" @click="formDialog?.close()"><X :size="19" aria-hidden="true" /></button>
         </div>
         <div class="customer-form__fields">
