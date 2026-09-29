@@ -65,9 +65,12 @@ function positionPanel() {
   const anchor = trigger.value.getBoundingClientRect()
   const width = panel.value.offsetWidth
   const height = panel.value.offsetHeight
-  const left = Math.max(8, Math.min(anchor.left, window.innerWidth - width - 8))
-  const below = anchor.bottom + height + 6 <= window.innerHeight
-  const top = below ? anchor.bottom + 6 : Math.max(8, anchor.top - height - 6)
+  let left = Math.max(8, Math.min(anchor.left, window.innerWidth - width - 8))
+  let top = Math.max(8, Math.min(anchor.top, window.innerHeight - height - 8))
+  if (anchor.bottom + height + 6 <= window.innerHeight) top = anchor.bottom + 6
+  else if (anchor.right + width + 6 <= window.innerWidth) left = anchor.right + 6
+  else if (anchor.left - width - 6 >= 8) left = anchor.left - width - 6
+  else if (anchor.top - height - 6 >= 8) top = anchor.top - height - 6
   panelPosition.value = { top: `${top}px`, left: `${left}px` }
 }
 
