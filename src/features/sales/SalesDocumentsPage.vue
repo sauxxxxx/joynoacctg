@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Pencil, Plus, Search, X } from '@lucide/vue'
+import { Plus, Search, X } from '@lucide/vue'
 import { isAddOnEnabled, recordAudit } from '../company/companyStore'
 import { customers } from './customers/customerPreviewStore'
 import DateRangeFilter from '../workspace/DateRangeFilter.vue'
 import SalesBulkInvoices from './SalesBulkInvoices.vue'
+import { tableAmount } from './salesFormat'
 import { salesDocuments, setupRecords, type DocumentKind, type SalesDocument, type SalesLineItem } from './salesPreviewStore'
 import './sales-pages.css'
 
@@ -66,9 +67,8 @@ const visibleRecords = computed(() => {
     return !term || `${item.number} ${customerName(item.customerId)} ${item.status}`.toLocaleLowerCase().includes(term)
   })
 })
-const visibleTotal = computed(() => visibleRecords.value.reduce((sum, item) => sum + item.amount, 0))
 
-type ColumnKey = 'number' | 'date' | 'customer' | 'paymentTerm' | 'paymentMethod' | 'status' | 'amount' | 'totalPaid' | 'remarks'
+type ColumnKey = 'number' | 'date' | 'customer' | 'paymentTerm' | 'paymentMethod' | 'status' | 'amount' | 'invoiceTotal' | 'totalPaid' | 'remarks'
 interface Column { key: ColumnKey; label: string; numeric?: boolean }
 // Column order follows the legacy screens for each document type.
 const columns = computed<Column[]>(() => {
@@ -84,11 +84,23 @@ const columns = computed<Column[]>(() => {
   return [
     { key: 'number', label: 'Collection Receipt #' }, { key: 'date', label: 'Date' }, { key: 'customer', label: 'Customer' },
     { key: 'status', label: 'Status' }, { key: 'paymentMethod', label: 'Payment Method' }, { key: 'amount', label: 'Amount', numeric: true },
+    { key: 'invoiceTotal', label: 'Total Amount', numeric: true },
   ]
 })
-// Invoices open by clicking the row, as in the legacy screen; other documents keep an Actions column.
-const rowOpens = computed(() => isInvoice.value)
-const columnCount = computed(() => columns.value.length + (rowOpens.value ? 0 : 1))
+// Footer totals appear under these columns, as in the legacy screens.
+const totalledColumns: ColumnKey[] = ['amount', 'invoiceTotal']
+
+/**
+ * Receipts show the referenced invoice's total next to the amount received.
+ * Assumption pending confirmation: legacy 'Total Amount' on receipts means the invoice total.
+ */
+function invoiceTotalFor(item: SalesDocument): number | null {
+  return salesDocuments.value.find((document) => document.kind === 'sales-invoices' && document.id === item.invoiceId)?.amount ?? null
+}
+
+function columnTotal(key: ColumnKey): number {
+  return visibleRecords.value.reduce((sum, item) => sum + (key === 'amount' ? item.amount : invoiceTotalFor(item) ?? 0), 0)
+}
 
 function cellText(item: SalesDocument, key: ColumnKey): string {
   switch (key) {
@@ -98,8 +110,9 @@ function cellText(item: SalesDocument, key: ColumnKey): string {
     case 'paymentTerm': return termName(item.paymentTermId)
     case 'paymentMethod': return methodName(item.paymentMethodId)
     case 'status': return item.status
-    case 'amount': return currency(item.amount)
-    case 'totalPaid': return currency(totalPaid(item.id))
+    case 'amount': return tableAmount(item.amount)
+    case 'invoiceTotal': { const total = invoiceTotalFor(item); return total === null ? '—' : tableAmount(total) }
+    case 'totalPaid': return tableAmount(totalPaid(item.id))
     case 'remarks': return item.remarks || '—'
   }
 }
@@ -194,30 +207,26 @@ function onBulkSaved(count: number) {
             <table class="sales-table sales-document-table">
               <thead><tr>
                 <th v-for="column in columns" :key="column.key" scope="col" :class="{ 'sales-table__number': column.numeric }">{{ column.label }}</th>
-                <th v-if="!rowOpens" scope="col">Actions</th>
               </tr></thead>
               <tbody>
-                <tr v-for="item in visibleRecords" :key="item.id" :class="{ 'sales-table__row--open': rowOpens }" @click="rowOpens && openForm(item)">
+                <tr v-for="item in visibleRecords" :key="item.id" class="sales-table__row--open" @click="openForm(item)">
                   <td v-for="column in columns" :key="column.key" :class="{ 'sales-table__number': column.numeric }">
                     <template v-if="column.key === 'number'">
-                      <button v-if="rowOpens" class="sales-table__link" type="button" :aria-label="`Open ${title.slice(0, -1).toLocaleLowerCase()} ${item.number}`" @click.stop="openForm(item)">{{ item.number }}</button>
-                      <strong v-else>{{ item.number }}</strong>
+                      <button class="sales-table__link" type="button" :aria-label="`Open ${title.slice(0, -1).toLocaleLowerCase()} ${item.number}`" @click.stop="openForm(item)">{{ item.number }}</button>
                     </template>
                     <span v-else-if="column.key === 'status'" class="sales-badge" :class="item.status === 'Paid' || item.status === 'Posted' || item.status === 'Issued' ? 'sales-badge--success' : 'sales-badge--muted'">{{ item.status }}</span>
                     <template v-else>{{ cellText(item, column.key) }}</template>
                   </td>
-                  <td v-if="!rowOpens" class="sales-table__actions"><button type="button" :aria-label="`Edit ${item.number}`" @click="openForm(item)"><Pencil :size="15" /></button></td>
                 </tr>
                 <tr v-if="!visibleRecords.length" class="sales-table__empty-row">
-                  <td :colspan="columnCount"><strong>No rows to show</strong><span>Try another date range or create a {{ isInvoice ? 'sales invoice' : 'receipt' }}.</span></td>
+                  <td :colspan="columns.length"><strong>No rows to show</strong><span>Try another date range or create a {{ isInvoice ? 'sales invoice' : 'receipt' }}.</span></td>
                 </tr>
               </tbody>
               <tfoot><tr>
                 <td v-for="(column, index) in columns" :key="column.key" :class="{ 'sales-table__number': column.numeric }">
                   <template v-if="index === 0">{{ visibleRecords.length }}</template>
-                  <template v-else-if="column.key === 'amount'">{{ currency(visibleTotal) }}</template>
+                  <template v-else-if="totalledColumns.includes(column.key)">{{ tableAmount(columnTotal(column.key)) }}</template>
                 </td>
-                <td v-if="!rowOpens" />
               </tr></tfoot>
             </table>
           </div>

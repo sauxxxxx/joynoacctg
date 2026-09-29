@@ -98,7 +98,7 @@ async function importExcel(event: Event) {
 
 <template>
   <section class="sales-page" aria-label="Add multiple invoices">
-    <p class="sales-preview-note">Frontend preview · Download the Excel template, then upload it to add invoice rows. Changes reset when this tab reloads.</p>
+    <p class="sales-preview-note">Download the Excel template, then upload it to add invoice rows.</p>
     <div class="sales-panel">
       <div class="sales-panel__toolbar">
         <div><h2>New invoices</h2><p>Add several draft invoices at once.</p></div>

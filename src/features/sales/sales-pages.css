@@ -36,7 +36,13 @@
 .sales-table__empty-row strong, .sales-table__empty-row span { display: block; }
 .sales-table__empty-row strong { color: #3a454d; font-size: 14px; }
 .sales-table__empty-row span { margin-top: 6px; color: #7d8790; font-size: 12px; }
-.sales-document-table tfoot td { padding: 14px 17px; border-top: 1px solid #dce1e4; color: #29353e; font-weight: 700; }
+.sales-document-table tfoot td, .sales-list-table tfoot td { padding: 14px 17px; border-top: 1px solid #dce1e4; color: #29353e; font-weight: 700; }
+.sales-table__center { text-align: center !important; }
+.sales-table__tag { margin-left: 8px; padding: 2px 7px; border-radius: 99px; background: #f1f2f3; color: #677078; font-size: 11px; font-weight: 600; }
+.sales-check { width: 18px; height: 18px; display: inline-grid; place-items: center; border: 1.5px solid #c3cad0; border-radius: 4px; background: #fff; color: #fff; vertical-align: middle; }
+.sales-check--on { border-color: #7f8fc9; background: #8c9bd3; }
+.sales-button--ghost-danger { margin-right: auto; border-color: transparent; background: transparent; color: #a43c46; }
+.sales-button--ghost-danger:hover { background: #fdf0f1; }
 .sales-table__actions button { min-width: 28px; height: 28px; display: inline-grid; place-items: center; margin-left: 3px; border: 0; border-radius: 5px; background: transparent; color: #65727c; }
 .sales-table__actions button:hover { background: #eff3f5; color: #263139; }
 .sales-badge { display: inline-block; padding: 5px 9px; border-radius: 99px; font-size: 11px; font-weight: 650; }
@@ -62,6 +68,10 @@
 .sales-report__heading span { color: #879099; font-size: 12px; }
 .sales-report__table { margin: 0 18px 24px; width: calc(100% - 36px); }
 .sales-report__table tfoot th { padding: 14px 17px; border-top: 1px solid #dce1e4; background: #fff; color: #29353e; }
+.sales-report__table tfoot td { padding: 14px 17px; border-top: 1px solid #dce1e4; background: #fff; color: #29353e; font-weight: 700; }
+.sales-report__heading--center { flex-direction: column; justify-content: center; gap: 4px; padding-top: 24px; text-align: center; }
+.sales-report__table--grid th, .sales-report__table--grid td { border: 1px solid #e3e7ea; }
+.sales-report__table--grid tbody tr:hover td { background: #fafbfb; }
 
 .sales-dialog { width: min(540px, calc(100vw - 32px)); max-height: min(90vh, 850px); overflow-y: auto; padding: 0; border: 1px solid #e1e5e7; border-radius: 10px; box-shadow: 0 24px 70px rgba(20, 30, 40, .18); color: var(--ink); }
 .sales-dialog::backdrop { background: rgba(20, 29, 36, .45); }

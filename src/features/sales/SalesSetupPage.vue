@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Pencil, Plus, Search, Trash2, X } from '@lucide/vue'
+import { Plus, Search, Trash2, X } from '@lucide/vue'
 import { recordAudit } from '../company/companyStore'
+import CheckMark from './CheckMark.vue'
+import { tableAmount } from './salesFormat'
 import { salesDocuments, setupRecords, type SetupKind, type SetupRecord } from './salesPreviewStore'
 import './sales-pages.css'
 
@@ -62,13 +64,17 @@ function save() {
   dialog.value?.close()
 }
 
-function askDelete(item: SetupRecord) {
+// Records open by clicking their row; deleting happens from the edit form.
+function deleteFromForm() {
+  const item = setupRecords.value.find((record) => record.id === draft.value.id)
+  if (!item) return
   const isReferenced = salesDocuments.value.some((document) =>
     document.paymentTermId === item.id || document.paymentMethodId === item.id || document.discountTypeId === item.id)
   if (isReferenced) {
-    notice.value = `${item.name} is used by a sales document. Mark it inactive instead.`
+    error.value = `${item.name} is used by a sales document. Mark it inactive instead.`
     return
   }
+  dialog.value?.close()
   deleting.value = item
   deleteDialog.value?.showModal()
 }
@@ -83,11 +89,11 @@ function remove() {
 }
 
 const title = computed(() => titles[props.pageId])
+const columnCount = computed(() => ({ 'sales-payment-terms': 7, 'sales-payment-methods': 2, 'sales-discount-types': 5 })[props.pageId])
 </script>
 
 <template>
   <section class="sales-page" :aria-label="title">
-    <p class="sales-preview-note">Frontend preview · Changes reset when this tab reloads.</p>
     <div v-if="notice" class="sales-notice" role="status">{{ notice }}</div>
     <div class="sales-panel">
       <div class="sales-panel__toolbar">
@@ -98,26 +104,35 @@ const title = computed(() => titles[props.pageId])
         </div>
       </div>
       <div class="sales-table-wrap">
-        <table class="sales-table">
+        <table class="sales-table sales-list-table">
           <thead>
-            <tr v-if="pageId === 'sales-payment-terms'"><th>Name</th><th># of Payments</th><th>Payment Frequency</th><th>Due On</th><th>Payment Due</th><th>Account</th><th>Active?</th><th>Actions</th></tr>
-            <tr v-else-if="pageId === 'sales-payment-methods'"><th>Name</th><th>Account</th><th>Active?</th><th>Actions</th></tr>
-            <tr v-else><th>Name</th><th>Discount Computation Type</th><th>Rate</th><th>Allow Override</th><th>Account</th><th>Active?</th><th>Actions</th></tr>
+            <tr v-if="pageId === 'sales-payment-terms'"><th scope="col">Name</th><th scope="col" class="sales-table__number"># of Payments</th><th scope="col">Payment Frequency</th><th scope="col" class="sales-table__number">Due On</th><th scope="col">Payment Due</th><th scope="col">Account</th><th scope="col" class="sales-table__center">Active?</th></tr>
+            <tr v-else-if="pageId === 'sales-payment-methods'"><th scope="col">Name</th><th scope="col">Account</th></tr>
+            <tr v-else><th scope="col">Name</th><th scope="col">Discount Computation Type</th><th scope="col" class="sales-table__number">Rate</th><th scope="col" class="sales-table__center">Allow Override</th><th scope="col">Account</th></tr>
           </thead>
           <tbody>
-            <tr v-for="item in visibleRows" :key="item.id">
-              <td><strong>{{ item.name }}</strong></td>
-              <template v-if="pageId === 'sales-payment-terms'"><td>{{ item.payments }}</td><td>{{ item.frequency || '—' }}</td><td>{{ item.dueOn }}</td><td>{{ item.paymentDue }}</td><td>{{ item.account || '—' }}</td></template>
-              <template v-else-if="pageId === 'sales-payment-methods'"><td>{{ item.account || '—' }}</td></template>
-              <template v-else><td>{{ item.computation }}</td><td>{{ item.rate.toFixed(2) }}</td><td>{{ item.allowOverride ? 'Yes' : 'No' }}</td><td>{{ item.account || '—' }}</td></template>
-              <td><span class="sales-badge" :class="item.active ? 'sales-badge--success' : 'sales-badge--muted'">{{ item.active ? 'Active' : 'Inactive' }}</span></td>
-              <td class="sales-table__actions"><button type="button" :aria-label="`Edit ${item.name}`" @click="openForm(item)"><Pencil :size="15" /></button><button type="button" :aria-label="`Delete ${item.name}`" @click="askDelete(item)"><Trash2 :size="15" /></button></td>
+            <tr v-for="item in visibleRows" :key="item.id" class="sales-table__row--open" @click="openForm(item)">
+              <td>
+                <button class="sales-table__link" type="button" :aria-label="`Open ${item.name}`" @click.stop="openForm(item)">{{ item.name }}</button>
+                <small v-if="!item.active && pageId !== 'sales-payment-terms'" class="sales-table__tag">Inactive</small>
+              </td>
+              <template v-if="pageId === 'sales-payment-terms'">
+                <td class="sales-table__number">{{ item.payments }}</td><td>{{ item.frequency }}</td><td class="sales-table__number">{{ item.dueOn }}</td><td>{{ item.paymentDue }}</td><td>{{ item.account }}</td>
+                <td class="sales-table__center"><CheckMark :value="item.active" label="Active" /></td>
+              </template>
+              <td v-else-if="pageId === 'sales-payment-methods'">{{ item.account }}</td>
+              <template v-else>
+                <td>{{ item.computation }}</td><td class="sales-table__number">{{ tableAmount(item.rate) }}</td>
+                <td class="sales-table__center"><CheckMark :value="item.allowOverride" label="Allow override" /></td><td>{{ item.account }}</td>
+              </template>
+            </tr>
+            <tr v-if="!visibleRows.length" class="sales-table__empty-row">
+              <td :colspan="columnCount"><strong>{{ rows.length ? 'No matching records' : 'No rows to show' }}</strong><span>{{ rows.length ? 'Try another search.' : `Add a ${title.slice(0, -1).toLocaleLowerCase()} to get started.` }}</span></td>
             </tr>
           </tbody>
+          <tfoot><tr><td :colspan="columnCount">{{ visibleRows.length }}</td></tr></tfoot>
         </table>
       </div>
-      <div v-if="!visibleRows.length" class="sales-empty"><strong>{{ rows.length ? 'No matching records' : `No ${title.toLocaleLowerCase()} yet` }}</strong><span>{{ rows.length ? 'Try another search.' : `Add a ${title.slice(0, -1).toLocaleLowerCase()} to get started.` }}</span></div>
-      <div class="sales-panel__footer">{{ visibleRows.length }} record{{ visibleRows.length === 1 ? '' : 's' }}</div>
     </div>
 
     <dialog ref="dialog" class="sales-dialog" :aria-label="`${draft.id ? 'Edit' : 'Add'} ${title.slice(0, -1)}`">
@@ -140,13 +155,13 @@ const title = computed(() => titles[props.pageId])
           <label class="sales-checkbox"><input v-model="draft.active" type="checkbox" /> Active</label>
         </div>
         <p v-if="error" class="sales-form__error" role="alert">{{ error }}</p>
-        <div class="sales-dialog__footer"><button class="sales-button" type="button" @click="dialog?.close()">Cancel</button><button class="sales-button sales-button--primary" type="submit">Save</button></div>
+        <div class="sales-dialog__footer"><button v-if="draft.id" class="sales-button sales-button--ghost-danger" type="button" @click="deleteFromForm"><Trash2 :size="15" aria-hidden="true" /> Delete</button><button class="sales-button" type="button" @click="dialog?.close()">Cancel</button><button class="sales-button sales-button--primary" type="submit">Save</button></div>
       </form>
     </dialog>
 
     <dialog ref="deleteDialog" class="sales-dialog sales-dialog--small" aria-label="Confirm deletion" @close="deleting = null">
       <div class="sales-dialog__header"><h2>Delete {{ title.slice(0, -1).toLocaleLowerCase() }}?</h2></div>
-      <p class="sales-dialog__body">Remove <strong>{{ deleting?.name }}</strong> from this preview?</p>
+      <p class="sales-dialog__body">Remove <strong>{{ deleting?.name }}</strong>? This cannot be undone.</p>
       <div class="sales-dialog__footer"><button class="sales-button" type="button" @click="deleteDialog?.close()">Cancel</button><button class="sales-button sales-button--danger" type="button" @click="remove">Delete</button></div>
     </dialog>
   </section>

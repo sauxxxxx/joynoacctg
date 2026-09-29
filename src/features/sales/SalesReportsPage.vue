@@ -2,12 +2,13 @@
 import { computed, ref } from 'vue'
 import DateRangeFilter from '../workspace/DateRangeFilter.vue'
 import { customers } from './customers/customerPreviewStore'
+import { reportDate, tableAmount } from './salesFormat'
 import { salesDocuments } from './salesPreviewStore'
 import './sales-pages.css'
 
 type ReportId = 'receivable-schedule' | 'receivable-aging'
 type AgingBucket = 'current' | 'oneToThirty' | 'thirtyOneToSixty' | 'sixtyOneToNinety' | 'overNinety'
-type AgingRow = { invoiceId: string; invoiceNumber: string; name: string; balance: number } & Record<AgingBucket, number>
+type AgingRow = { customerId: string; name: string; balance: number } & Record<AgingBucket, number>
 
 const props = defineProps<{ pageId: ReportId }>()
 const isAging = computed(() => props.pageId === 'receivable-aging')
@@ -20,7 +21,6 @@ const asOf = computed(() => asOfRange.value.to)
 const months = ref(3)
 const customerFilter = ref('')
 const monthsError = computed(() => !isAging.value && (!Number.isInteger(Number(months.value)) || months.value < 1 || months.value > 36) ? 'Enter 1 to 36 months.' : '')
-const currency = (value: number) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(value)
 const utcDay = (date: string) => Date.parse(`${date}T00:00:00Z`) / 86_400_000
 
 const balances = computed(() => {
@@ -53,17 +53,27 @@ const scheduleRows = computed(() => {
     }))
 })
 
-const agingRows = computed<AgingRow[]>(() => balances.value.map(({ invoice, balance }) => {
-  const row: AgingRow = {
-    invoiceId: invoice.id, invoiceNumber: invoice.number,
-    name: customers.value.find((customer) => customer.id === invoice.customerId)?.name ?? 'Unknown customer',
-    balance, current: 0, oneToThirty: 0, thirtyOneToSixty: 0, sixtyOneToNinety: 0, overNinety: 0,
+// One row per customer, as in the legacy AR Aging report. Each invoice balance falls in one bucket by days past due.
+const agingRows = computed<AgingRow[]>(() => {
+  const rows = new Map<string, AgingRow>()
+  for (const { invoice, balance } of balances.value) {
+    const row = rows.get(invoice.customerId) ?? {
+      customerId: invoice.customerId,
+      name: customers.value.find((customer) => customer.id === invoice.customerId)?.name ?? 'Unknown customer',
+      balance: 0, current: 0, oneToThirty: 0, thirtyOneToSixty: 0, sixtyOneToNinety: 0, overNinety: 0,
+    }
+    const overdueDays = utcDay(asOf.value) - utcDay(invoice.dueDate)
+    const bucket: AgingBucket = overdueDays <= 0 ? 'current' : overdueDays <= 30 ? 'oneToThirty' : overdueDays <= 60 ? 'thirtyOneToSixty' : overdueDays <= 90 ? 'sixtyOneToNinety' : 'overNinety'
+    row.balance += balance
+    row[bucket] += balance
+    rows.set(invoice.customerId, row)
   }
-  const overdueDays = utcDay(asOf.value) - utcDay(invoice.dueDate)
-  const bucket: AgingBucket = overdueDays <= 0 ? 'current' : overdueDays <= 30 ? 'oneToThirty' : overdueDays <= 60 ? 'thirtyOneToSixty' : overdueDays <= 90 ? 'sixtyOneToNinety' : 'overNinety'
-  row[bucket] = balance
-  return row
-}))
+  return [...rows.values()].sort((a, b) => a.name.localeCompare(b.name))
+})
+const agingColumns: { key: 'balance' | AgingBucket; label: string }[] = [
+  { key: 'balance', label: 'Balance' }, { key: 'current', label: 'Current' }, { key: 'oneToThirty', label: '1-30 Days' },
+  { key: 'thirtyOneToSixty', label: '31-60 Days' }, { key: 'sixtyOneToNinety', label: '61-90 Days' }, { key: 'overNinety', label: '91+ Days' },
+]
 
 const totals = computed(() => agingRows.value.reduce((sum, row) => ({
   balance: sum.balance + row.balance,
@@ -73,12 +83,10 @@ const totals = computed(() => agingRows.value.reduce((sum, row) => ({
   sixtyOneToNinety: sum.sixtyOneToNinety + row.sixtyOneToNinety,
   overNinety: sum.overNinety + row.overNinety,
 }), { balance: 0, current: 0, oneToThirty: 0, thirtyOneToSixty: 0, sixtyOneToNinety: 0, overNinety: 0 }))
-
 </script>
 
 <template>
   <section class="sales-page" :aria-label="title">
-    <p class="sales-preview-note">Frontend preview · This report uses unpaid invoices and posted receipts entered in this tab. Accounting integration will provide final balances.</p>
     <div class="sales-panel sales-report">
       <div class="sales-panel__toolbar">
         <div><h2>{{ title }}</h2><p>{{ isAging ? 'See how long invoice balances have been outstanding.' : 'See receivables due in the selected period.' }}</p></div>
@@ -90,18 +98,26 @@ const totals = computed(() => agingRows.value.reduce((sum, row) => ({
           <DateRangeFilter v-model="asOfRange" :default-value="defaultAsOf" mode="as-of" />
         </div>
       </div>
-      <div class="sales-workspace sales-workspace--single">
-        <div class="sales-workspace__results sales-report__results">
-          <div class="sales-report__heading"><h3>{{ isAging ? 'AR Aging' : 'Receivables' }}</h3><span>As of {{ asOf }}</span></div>
-          <p v-if="monthsError" class="sales-form__error" role="alert">{{ monthsError }}</p>
-          <div v-else-if="!(isAging ? agingRows.length : scheduleRows.length)" class="sales-empty"><strong>No outstanding balances</strong><span>No unpaid invoices {{ isAging ? 'are open' : 'fall due in this period' }} as of {{ asOf }}.</span></div>
-          <template v-else-if="isAging">
-            <div class="sales-table-wrap"><table class="sales-table sales-report__table"><thead><tr><th>Customer</th><th>Invoice #</th><th class="sales-table__number">Balance</th><th class="sales-table__number">Current</th><th class="sales-table__number">1–30 Days</th><th class="sales-table__number">31–60 Days</th><th class="sales-table__number">61–90 Days</th><th class="sales-table__number">91+ Days</th></tr></thead>
-              <tbody><tr v-for="row in agingRows" :key="row.invoiceId"><td>{{ row.name }}</td><td>{{ row.invoiceNumber }}</td><td class="sales-table__number">{{ currency(row.balance) }}</td><td class="sales-table__number">{{ currency(row.current) }}</td><td class="sales-table__number">{{ currency(row.oneToThirty) }}</td><td class="sales-table__number">{{ currency(row.thirtyOneToSixty) }}</td><td class="sales-table__number">{{ currency(row.sixtyOneToNinety) }}</td><td class="sales-table__number">{{ currency(row.overNinety) }}</td></tr></tbody>
-              <tfoot><tr><th>Total</th><th></th><th class="sales-table__number">{{ currency(totals.balance) }}</th><th class="sales-table__number">{{ currency(totals.current) }}</th><th class="sales-table__number">{{ currency(totals.oneToThirty) }}</th><th class="sales-table__number">{{ currency(totals.thirtyOneToSixty) }}</th><th class="sales-table__number">{{ currency(totals.sixtyOneToNinety) }}</th><th class="sales-table__number">{{ currency(totals.overNinety) }}</th></tr></tfoot>
-            </table></div>
-          </template>
-          <template v-else><div class="sales-table-wrap"><table class="sales-table sales-report__table"><thead><tr><th>Customer</th><th>Invoice #</th><th>Due date</th><th class="sales-table__number">Balance Due</th></tr></thead><tbody><tr v-for="row in scheduleRows" :key="row.invoiceId"><td>{{ row.name }}</td><td>{{ row.invoiceNumber }}</td><td>{{ row.dueDate }}</td><td class="sales-table__number">{{ currency(row.balance) }}</td></tr></tbody><tfoot><tr><th>Total</th><th></th><th></th><th class="sales-table__number">{{ currency(scheduleRows.reduce((sum, row) => sum + row.balance, 0)) }}</th></tr></tfoot></table></div></template>
+      <div class="sales-report__results">
+        <div class="sales-report__heading sales-report__heading--center"><h3>{{ isAging ? 'AR Aging' : 'Receivables' }}</h3><span>As of {{ reportDate(asOf) }}</span></div>
+        <p v-if="monthsError" class="sales-form__error" role="alert">{{ monthsError }}</p>
+        <div v-else-if="isAging" class="sales-table-wrap">
+          <table class="sales-table sales-report__table sales-report__table--grid">
+            <thead><tr><th scope="col">Customer</th><th v-for="column in agingColumns" :key="column.key" scope="col" class="sales-table__number">{{ column.label }}</th></tr></thead>
+            <tbody>
+              <tr v-for="row in agingRows" :key="row.customerId"><td>{{ row.name }}</td><td v-for="column in agingColumns" :key="column.key" class="sales-table__number">{{ tableAmount(row[column.key]) }}</td></tr>
+            </tbody>
+            <tfoot><tr><th scope="row">Total</th><td v-for="column in agingColumns" :key="column.key" class="sales-table__number">{{ tableAmount(totals[column.key]) }}</td></tr></tfoot>
+          </table>
+        </div>
+        <div v-else class="sales-table-wrap">
+          <table class="sales-table sales-report__table sales-report__table--grid">
+            <thead><tr><th scope="col">Customer</th><th scope="col">Invoice #</th><th scope="col">Due date</th><th scope="col" class="sales-table__number">Balance Due</th></tr></thead>
+            <tbody>
+              <tr v-for="row in scheduleRows" :key="row.invoiceId"><td>{{ row.name }}</td><td>{{ row.invoiceNumber }}</td><td>{{ reportDate(row.dueDate) }}</td><td class="sales-table__number">{{ tableAmount(row.balance) }}</td></tr>
+            </tbody>
+            <tfoot><tr><th scope="row">Total</th><td /><td /><td class="sales-table__number">{{ tableAmount(scheduleRows.reduce((sum, row) => sum + row.balance, 0)) }}</td></tr></tfoot>
+          </table>
         </div>
       </div>
     </div>

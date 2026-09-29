@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
-import { Pencil, Plus, Search, Trash2, UsersRound, X } from '@lucide/vue'
+import { Plus, Search, Trash2, X } from '@lucide/vue'
 import { recordAudit } from '../../company/companyStore'
 import { customers, type Customer } from './customerPreviewStore'
 import { salesDocuments } from '../salesPreviewStore'
@@ -85,6 +85,18 @@ function askToChange(customer: Customer, kind: PendingAction['kind']) {
   confirmDialog.value?.showModal()
 }
 
+// Customers open by clicking their row; deleting happens from the edit form.
+function deleteFromForm() {
+  const customer = customers.value.find((item) => item.id === editingId.value)
+  if (!customer) return
+  if (salesDocuments.value.some((document) => document.customerId === customer.id)) {
+    formError.value = 'This customer is used by a sales document. Set the status to Inactive instead.'
+    return
+  }
+  formDialog.value?.close()
+  askToChange(customer, 'delete')
+}
+
 function confirmChange() {
   const action = pendingAction.value
   if (!action) return
@@ -116,7 +128,6 @@ function clearFilters() {
         <span class="customers-page__eyebrow">Sales setup</span>
         <h2>Customers</h2>
         <p>Keep customer names, tax identifiers, and contact details ready for sales documents.</p>
-        <p class="customers-page__preview">Frontend preview: changes last until this tab is reloaded.</p>
       </div>
       <button class="customer-button customer-button--primary" type="button" @click="openForm()">
         <Plus :size="17" aria-hidden="true" /> Add customer
@@ -141,32 +152,27 @@ function clearFilters() {
         </label>
       </div>
 
-      <div v-if="filteredCustomers.length" class="customer-table-wrap">
+      <div class="customer-table-wrap">
         <table class="customer-table">
-          <caption>{{ filteredCustomers.length }} customer{{ filteredCustomers.length === 1 ? '' : 's' }} shown</caption>
-          <thead><tr><th scope="col">Name</th><th scope="col">TIN</th><th scope="col">Address</th><th scope="col">Tel No</th><th scope="col">Actions</th></tr></thead>
+          <thead><tr><th scope="col">Name</th><th scope="col">TIN</th><th scope="col">Address</th><th scope="col">Tel No</th></tr></thead>
           <tbody>
-            <tr v-for="customer in filteredCustomers" :key="customer.id">
-              <td data-label="Name"><strong>{{ customer.name }}</strong><small v-if="!customer.active">Inactive</small></td>
-              <td data-label="TIN">{{ customer.tin || '—' }}</td>
-              <td data-label="Address">{{ customer.address || '—' }}</td>
-              <td data-label="Tel No">{{ customer.phone || '—' }}</td>
-              <td data-label="Actions" class="customer-table__actions">
-                <button class="customer-action" type="button" :aria-label="`Edit ${customer.name}`" @click="openForm(customer)"><Pencil :size="15" aria-hidden="true" /> Edit</button>
-                <button class="customer-action" type="button" :aria-label="`${customer.active ? 'Deactivate' : 'Activate'} ${customer.name}`" @click="askToChange(customer, 'status')">{{ customer.active ? 'Deactivate' : 'Activate' }}</button>
-                <button class="customer-action customer-action--danger" type="button" :aria-label="`Delete ${customer.name}`" @click="askToChange(customer, 'delete')"><Trash2 :size="15" aria-hidden="true" /></button>
+            <tr v-for="customer in filteredCustomers" :key="customer.id" class="customer-table__row" @click="openForm(customer)">
+              <td data-label="Name"><button class="customer-table__link" type="button" :aria-label="`Open ${customer.name}`" @click.stop="openForm(customer)">{{ customer.name }}</button><small v-if="!customer.active">Inactive</small></td>
+              <td data-label="TIN">{{ customer.tin }}</td>
+              <td data-label="Address">{{ customer.address }}</td>
+              <td data-label="Tel No">{{ customer.phone }}</td>
+            </tr>
+            <tr v-if="!filteredCustomers.length" class="customer-table__empty">
+              <td colspan="4">
+                <strong>{{ customers.length ? 'No customers found' : 'No rows to show' }}</strong>
+                <span>{{ customers.length ? 'Try another search or status filter.' : 'Add your first customer to start building your sales records.' }}</span>
+                <button v-if="customers.length" class="customer-button customer-button--secondary" type="button" @click="clearFilters">Clear filters</button>
+                <button v-else class="customer-button customer-button--secondary" type="button" @click="openForm()">Add customer</button>
               </td>
             </tr>
           </tbody>
+          <tfoot><tr><td colspan="4">{{ filteredCustomers.length }}</td></tr></tfoot>
         </table>
-      </div>
-
-      <div v-else class="customer-empty">
-        <span class="customer-empty__icon"><UsersRound :size="24" aria-hidden="true" /></span>
-        <h2>{{ customers.length ? 'No customers found' : 'No customers yet' }}</h2>
-        <p>{{ customers.length ? 'Try another search or status filter.' : 'Add your first customer to start building your sales records.' }}</p>
-        <button v-if="customers.length" class="customer-button customer-button--secondary" type="button" @click="clearFilters">Clear filters</button>
-        <button v-else class="customer-button customer-button--secondary" type="button" @click="openForm()">Add customer</button>
       </div>
     </div>
 
@@ -187,6 +193,7 @@ function clearFilters() {
         </div>
         <p v-if="formError" class="customer-form__error" role="alert">{{ formError }}</p>
         <div class="customer-dialog__footer">
+          <button v-if="editingId" class="customer-button customer-button--ghost-danger" type="button" @click="deleteFromForm"><Trash2 :size="15" aria-hidden="true" /> Delete</button>
           <button class="customer-button customer-button--secondary" type="button" @click="formDialog?.close()">Cancel</button>
           <button class="customer-button customer-button--primary" type="submit">{{ editingId ? 'Save changes' : 'Add customer' }}</button>
         </div>
