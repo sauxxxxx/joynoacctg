@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Pencil, Plus, Search, X } from '@lucide/vue'
+import { isAddOnEnabled, recordAudit } from '../company/companyStore'
 import { customers } from './customers/customerPreviewStore'
 import SalesBulkInvoices from './SalesBulkInvoices.vue'
 import { salesDocuments, setupRecords, type DocumentKind, type SalesDocument, type SalesLineItem } from './salesPreviewStore'
@@ -133,11 +134,13 @@ function save() {
     ? salesDocuments.value.map((record) => record.id === item.id ? item : record)
     : [...salesDocuments.value, item]
   notice.value = `${title.value.slice(0, -1)} ${draft.value.id ? 'updated' : 'added'}.`
+  recordAudit('Sales', draft.value.id ? 'Updated' : 'Created', `${title.value.slice(0, -1)}: ${item.number}`, `${item.status} · ${currency(item.amount)}`)
   dialog.value?.close()
 }
 function onBulkSaved(count: number) {
   bulkOpen.value = false
   notice.value = `${count} draft invoice${count === 1 ? '' : 's'} added.`
+  recordAudit('Sales', 'Created', 'Invoices (bulk)', `${count} draft invoice${count === 1 ? '' : 's'}`)
 }
 </script>
 
@@ -153,7 +156,7 @@ function onBulkSaved(count: number) {
           <label class="sales-search"><Search :size="16" aria-hidden="true" /><input v-model="search" type="search" placeholder="Type to filter" :aria-label="`Search ${title}`" /></label>
           <select v-model="statusFilter" class="sales-status-filter" aria-label="Filter by status"><option value="all">All statuses</option><option>Draft</option><option v-if="isInvoice">Unpaid</option><option v-if="isInvoice">Paid</option><option v-if="!isInvoice">{{ isAcknowledgement ? 'Issued' : 'Posted' }}</option><option>Cancelled</option></select>
           <button class="sales-button sales-button--primary" type="button" @click="openForm()"><Plus :size="16" aria-hidden="true" /> New {{ isInvoice ? 'invoice' : isAcknowledgement ? 'acknowledgement receipt' : 'receipt' }}</button>
-          <button v-if="isInvoice" class="sales-button" type="button" @click="bulkOpen = true">Add multiple</button>
+          <button v-if="isInvoice && isAddOnEnabled('bulk-invoice-import')" class="sales-button" type="button" @click="bulkOpen = true">Add multiple</button>
         </div>
       </div>
       <div class="sales-workspace">

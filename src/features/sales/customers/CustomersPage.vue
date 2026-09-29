@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
 import { Pencil, Plus, Search, Trash2, UsersRound, X } from '@lucide/vue'
+import { recordAudit } from '../../company/companyStore'
 import { customers, type Customer } from './customerPreviewStore'
 import { salesDocuments } from '../salesPreviewStore'
 import './customers.css'
@@ -71,6 +72,7 @@ function saveCustomer() {
     customers.value = [...customers.value, customer]
     feedback.value = `${customer.name} added.`
   }
+  recordAudit('Sales', editingId.value ? 'Updated' : 'Created', `Customer: ${customer.name}`)
   formDialog.value?.close()
 }
 
@@ -89,11 +91,13 @@ function confirmChange() {
   if (action.kind === 'delete') {
     customers.value = customers.value.filter((customer) => customer.id !== action.customer.id)
     feedback.value = `${action.customer.name} deleted.`
+    recordAudit('Sales', 'Deleted', `Customer: ${action.customer.name}`)
   } else {
     customers.value = customers.value.map((customer) => customer.id === action.customer.id
       ? { ...customer, active: !customer.active }
       : customer)
     feedback.value = `${action.customer.name} ${action.customer.active ? 'deactivated' : 'activated'}.`
+    recordAudit('Sales', action.customer.active ? 'Deactivated' : 'Activated', `Customer: ${action.customer.name}`)
   }
   confirmDialog.value?.close()
   pendingAction.value = null

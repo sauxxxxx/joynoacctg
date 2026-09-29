@@ -1,0 +1,50 @@
+.an-page { --an-series: #2a78d6; --an-series-wash: rgba(42, 120, 214, .1); --an-grid: #eceef0; --an-axis: #c9cfd3; --an-muted: #89929a; }
+
+.an-kpis { display: grid; grid-template-columns: 1.35fr repeat(3, minmax(0, 1fr)); gap: 12px; }
+.an-kpi { min-width: 0; padding: 16px 18px; border: 1px solid var(--border); border-radius: 9px; background: #fff; }
+.an-kpi > span { display: block; color: #6b757d; font-size: 12px; }
+.an-kpi > strong { display: block; margin-top: 8px; color: #1d2328; font-size: 22px; font-weight: 650; letter-spacing: -.02em; overflow-wrap: anywhere; }
+.an-kpi--hero > strong { font-size: 30px; }
+.an-kpi > small { display: flex; align-items: center; gap: 4px; margin-top: 6px; color: #7f8990; font-size: 12px; }
+/* Direction only; whether a change is good depends on the account type, so no status color. */
+.an-delta { color: #4a555d; font-weight: 600; }
+
+.an-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; }
+
+.an-chart { position: relative; padding: 8px 12px 12px 4px; }
+.an-chart svg { display: block; overflow: visible; outline: none; touch-action: pan-y; }
+.an-chart svg:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; border-radius: 4px; }
+.an-chart__grid line { stroke: var(--an-grid); stroke-width: 1; }
+.an-chart__grid line.an-chart__baseline { stroke: var(--an-axis); }
+.an-chart text { fill: var(--an-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.an-chart__line { fill: none; stroke: var(--an-series); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.an-chart__area { fill: var(--an-series-wash); }
+.an-chart__dot { fill: var(--an-series); stroke: #fff; stroke-width: 2; }
+.an-chart__column { fill: var(--an-series); }
+.an-chart__crosshair { stroke: #aab3b9; stroke-width: 1; }
+.an-chart__hover-band { fill: #f1f4f6; }
+.an-chart__tooltip { position: absolute; z-index: 5; display: flex; flex-direction: column; gap: 2px; min-width: 120px; padding: 8px 10px; border: 1px solid #e1e5e8; border-radius: 6px; background: #fff; box-shadow: 0 8px 22px rgba(22, 30, 36, .12); pointer-events: none; white-space: nowrap; }
+.an-chart__tooltip span { color: #6b757d; font-size: 11px; }
+.an-chart__tooltip strong { color: #1d2328; font-size: 13px; font-variant-numeric: tabular-nums; }
+
+.an-data-table { padding: 0 20px 16px; }
+.an-data-table summary { width: fit-content; color: #305e7b; font-size: 12px; font-weight: 600; cursor: pointer; }
+.an-data-table table { margin-top: 10px; }
+
+.an-bars { display: flex; flex-direction: column; gap: 14px; margin: 0; padding: 20px; list-style: none; }
+.an-bars li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; }
+.an-bars__label { min-width: 0; overflow: hidden; color: #2f3a42; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.an-bars__value { color: #1d2328; font-size: 13px; font-weight: 650; font-variant-numeric: tabular-nums; text-align: right; }
+.an-bars__value small { margin-left: 6px; color: #7f8990; font-weight: 500; }
+.an-bars__track { grid-column: 1 / -1; height: 8px; border-radius: 4px; background: #f0f2f4; }
+.an-bars__fill { height: 100%; min-width: 2px; border-radius: 0 4px 4px 0; background: var(--an-series); }
+.an-bars__fill--negative { background: #9aa4ab; }
+
+@media (max-width: 1100px) {
+  .an-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .an-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 520px) {
+  .an-kpis { grid-template-columns: 1fr; }
+  .an-kpi--hero > strong { font-size: 26px; }
+}

@@ -1,0 +1,91 @@
+.acct-doc { overflow: hidden; }
+.acct-doc__header { padding: 26px 24px 20px; border-bottom: 1px solid var(--border); text-align: center; }
+.acct-doc__company { margin: 0; color: #202428; font-size: 15px; font-weight: 700; }
+.acct-doc__company--missing { color: #9a8a6c; font-size: 12px; font-weight: 600; }
+.acct-doc__meta { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px; margin: 5px 0 0; color: #6f7a82; font-size: 11px; }
+.acct-doc__title { margin: 14px 0 0; color: #202428; font-size: 19px; font-weight: 650; letter-spacing: -.015em; }
+.acct-doc__period { margin: 4px 0 0; color: #6f7a82; font-size: 12px; }
+.acct-doc__body { min-width: 0; }
+.acct-doc__footer { padding: 18px 24px 20px; border-top: 1px solid var(--border); }
+.acct-doc__signatories { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 24px; margin: 18px 0 20px; }
+.acct-doc__signatories div { display: flex; flex-direction: column; align-items: center; gap: 3px; text-align: center; }
+.acct-doc__line { width: 100%; max-width: 220px; height: 1px; margin-bottom: 6px; background: #aeb7bd; }
+.acct-doc__signatories strong { color: #29343c; font-size: 12px; }
+.acct-doc__signatories small { color: #7d8790; font-size: 11px; }
+.acct-doc__note { margin: 0 0 8px; color: #59646c; font-size: 11px; line-height: 1.5; white-space: pre-line; }
+.acct-doc__generated { margin: 0; color: #939ca3; font-size: 11px; }
+
+/* Financial statements: section → category → account rows with subtotals. */
+.acct-statement { width: 100%; border-collapse: collapse; font-size: 13px; }
+.acct-statement th, .acct-statement td { padding: 8px 24px; text-align: left; }
+.acct-statement .ws-num { width: 190px; }
+.acct-statement__section th { padding-top: 22px; color: #202428; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.acct-statement__group td { padding-top: 12px; color: #2f3a42; font-weight: 650; }
+.acct-statement__account td { color: #48535b; }
+.acct-statement__account td:first-child { padding-left: 44px; }
+.acct-statement__account small { margin-left: 8px; color: #9aa3aa; font-size: 11px; font-variant-numeric: tabular-nums; }
+.acct-statement__subtotal td { border-top: 1px solid #e3e7ea; color: #2f3a42; font-weight: 650; }
+.acct-statement__subtotal td:first-child { padding-left: 44px; }
+.acct-statement__total td { border-top: 1px solid #aeb7bd; color: #202428; font-weight: 700; }
+.acct-statement__grand td { border-top: 1px solid #202428; border-bottom: 3px double #202428; color: #202428; font-size: 14px; font-weight: 750; }
+.acct-statement__spacer td { height: 10px; padding: 0; }
+.acct-statement--simple .acct-statement__group td { padding-left: 44px; color: #48535b; font-weight: 500; }
+
+/* Wide monthly tables keep the label column in view while scrolling. */
+.acct-monthly th:first-child, .acct-monthly td:first-child { position: sticky; left: 0; z-index: 1; min-width: 220px; background: #fff; }
+.acct-monthly thead th:first-child { background: #fafbfb; }
+.acct-monthly td { padding: 10px 14px; font-size: 12px; }
+.acct-monthly th { padding: 11px 14px; }
+.acct-monthly .acct-monthly__heading td { padding-top: 16px; color: #202428; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.acct-monthly .acct-monthly__total td { border-top: 1px solid #aeb7bd; color: #202428; font-weight: 700; }
+.acct-monthly .acct-monthly__net td { border-top: 1px solid #202428; border-bottom: 3px double #202428; color: #202428; font-weight: 750; }
+.acct-monthly tbody tr:hover td { background: #fbfcfc; }
+
+/* General ledger groups. */
+.acct-ledger__account td { padding-top: 20px; border-top: 0; background: #fff !important; color: #202428; font-weight: 700; }
+.acct-ledger__account small { margin-left: 8px; color: #7d8790; font-weight: 500; }
+.acct-ledger__opening td, .acct-ledger__closing td { color: #5b666e; font-style: italic; }
+.acct-ledger__closing td { border-top: 1px solid #cfd6da; color: #2f3a42; font-style: normal; font-weight: 650; }
+.acct-ledger td { padding: 9px 14px; font-size: 12px; }
+.acct-ledger th { padding: 11px 14px; }
+
+.acct-check { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 18px; }
+.acct-check__status { display: flex; align-items: center; gap: 8px; }
+.acct-check__figures {display: flex; flex-wrap: wrap; gap: 6px 22px; font-variant-numeric: tabular-nums; }
+.acct-check__figures span { color: #5b666e; }
+.acct-check__figures b { color: #202428; }
+
+.acct-summary-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.acct-summary-tiles div { padding: 15px 16px; border: 1px solid var(--border); border-radius: 9px; background: #fff; }
+.acct-summary-tiles span { display: block; color: #6f7a82; font-size: 12px; }
+.acct-summary-tiles strong { display: block; margin-top: 6px; color: #202428; font-size: 20px; font-weight: 650; letter-spacing: -.015em; }
+.acct-summary-tiles small { display: block; margin-top: 3px; color: #8a949b; font-size: 11px; }
+
+@media (max-width: 760px) {
+  .acct-statement th, .acct-statement td { padding-left: 16px; padding-right: 16px; }
+  .acct-statement__account td:first-child, .acct-statement__subtotal td:first-child, .acct-statement--simple .acct-statement__group td { padding-left: 28px; }
+  .acct-statement .ws-num { width: auto; }
+  .acct-statement__account small { display: block; margin: 2px 0 0; }
+  .acct-doc__header { padding: 22px 16px 16px; }
+  .acct-doc__footer { padding: 16px; }
+}
+
+@media print {
+  @page { margin: 14mm; }
+  body:has(.acct-report) { background: #fff; }
+  body:has(.acct-report) .sidebar,
+  body:has(.acct-report) .topbar,
+  body:has(.acct-report) .skip-link,
+  body:has(.acct-report) .page-content__heading,
+  .acct-report__controls,
+  .acct-report__screen-only,
+  .acct-report__summary { display: none !important; }
+  body:has(.acct-report) .app-shell { display: block; }
+  body:has(.acct-report) .page-content { min-height: 0; padding: 0; }
+  .acct-report { max-width: none; padding: 0; }
+  .acct-doc { border: 0; }
+  .acct-doc .ws-table-wrap { overflow: visible; }
+  .acct-doc .ws-table th { background: none; }
+  .acct-monthly th:first-child, .acct-monthly td:first-child { position: static; min-width: 0; }
+  .acct-doc tr { break-inside: avoid; }
+}
