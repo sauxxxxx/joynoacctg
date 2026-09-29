@@ -1,6 +1,6 @@
 # Joyno Accounting
 
-Vue 3 application shell for the accounting system. This first slice contains the sidebar, topbar, navigation search, mobile drawer, and shared visual tokens. Feature pages and Supabase integration are the next slices.
+Vue 3 frontend for the accounting system. The shared shell contains the sidebar, topbar, navigation search, mobile drawer, and visual tokens. Supabase integration is a later slice.
 
 ## Run locally
 
@@ -18,4 +18,8 @@ Open the local URL printed by Vite. Use `npm.cmd run build` to type-check and cr
 - `src/styles.css` — visual tokens and responsive shell styling.
 - `src/App.vue` — selected section and shell layout.
 
-The selected menu item currently updates the shell heading. It does not load a feature page yet; feature owners can add routes and page content as their modules are built.
+Menu selections update the URL, so a page can be linked and reloaded.
+
+## Owner B frontend preview
+
+Open **Accounting → Journal Entries → Purchase Journal**, or visit `/?page=purchase-journal`. This page uses labeled sample entries. Date filtering, search, review selection, and entry details work in the browser. **Move to CDJ** remains disabled until the transfer rules and data service are defined.

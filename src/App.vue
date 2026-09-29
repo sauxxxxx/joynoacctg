@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppSidebar from './components/AppSidebar.vue'
 import AppTopbar from './components/AppTopbar.vue'
+import PurchaseJournalPage from './features/accounting/journals/PurchaseJournalPage.vue'
 import { findPage } from './navigation'
 
 const activeId = ref('dashboard')
@@ -32,15 +33,29 @@ function onKeydown(event: KeyboardEvent) {
 
 function selectPage(id: string) {
   activeId.value = id
+  const url = new URL(window.location.href)
+  if (id === 'dashboard') url.searchParams.delete('page')
+  else url.searchParams.set('page', id)
+  window.history.pushState(null, '', url)
 }
 
+function syncPageFromUrl() {
+  const id = new URL(window.location.href).searchParams.get('page')
+  activeId.value = id && findPage(id) ? id : 'dashboard'
+}
+
+watch(activePage, (page) => { document.title = `${page.label} | Joyno Accounting` })
+
 onMounted(() => {
+  syncPageFromUrl()
   syncViewport()
   window.addEventListener('resize', syncViewport)
+  window.addEventListener('popstate', syncPageFromUrl)
   document.addEventListener('keydown', onKeydown)
 })
 onBeforeUnmount(() => {
   window.removeEventListener('resize', syncViewport)
+  window.removeEventListener('popstate', syncPageFromUrl)
   document.removeEventListener('keydown', onKeydown)
 })
 </script>
@@ -59,7 +74,7 @@ onBeforeUnmount(() => {
     />
     <div class="app-shell__body" :inert="mobileOpen">
       <AppTopbar :collapsed="sidebarCollapsed" :is-mobile="isMobile" @toggle-sidebar="toggleSidebar" @select="selectPage" />
-      <main id="main-content" class="page-content" tabindex="-1">
+      <main id="main-content" class="page-content" :class="{ 'page-content--journal': activeId === 'purchase-journal' }" tabindex="-1">
         <div class="page-content__heading">
           <nav v-if="activePage.path.length > 1" class="breadcrumbs" aria-label="Breadcrumb">
             <template v-for="(part, index) in activePage.path" :key="`${part}-${index}`">
@@ -68,7 +83,9 @@ onBeforeUnmount(() => {
           </nav>
           <h1>{{ activePage.label }}</h1>
         </div>
-        <div class="page-content__canvas" />
+        <div class="page-content__canvas">
+          <PurchaseJournalPage v-if="activeId === 'purchase-journal'" />
+        </div>
       </main>
     </div>
   </div>
