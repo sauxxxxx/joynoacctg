@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { AlertTriangle, Download, Info, Printer, RotateCw } from '@lucide/vue'
 import { companyDisplayName, companyProfile, isAddOnEnabled, reportingSettings } from '../../company/companyStore'
 import type { EntryIssue } from './ledgerMath'
@@ -16,7 +16,7 @@ const props = defineProps<{
   sourceNote?: string
   canExport?: boolean
 }>()
-const emit = defineEmits<{ generate: []; export: []; retry: [] }>()
+const emit = defineEmits<{ export: []; retry: [] }>()
 
 const address = computed(() => {
   const profile = companyProfile.value
@@ -30,11 +30,8 @@ const signatories = computed(() => [
 const exportEnabled = computed(() => isAddOnEnabled('report-csv-export'))
 const stamp = () => new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date())
 const generatedAt = ref(stamp())
-
-function generate() {
-  generatedAt.value = stamp()
-  emit('generate')
-}
+// Filters apply immediately, so the report is regenerated whenever its period changes.
+watch(() => props.period, () => { generatedAt.value = stamp() })
 
 function print() {
   window.print()
@@ -47,14 +44,13 @@ function print() {
       <p v-if="sourceNote" class="ws-note acct-report__screen-only"><Info :size="14" aria-hidden="true" />{{ sourceNote }}</p>
 
       <div class="ws-panel acct-report__controls">
-        <form class="ws-toolbar" @submit.prevent="generate">
+        <div class="ws-toolbar">
           <slot name="filters" />
-          <button class="ws-button ws-button--primary" type="submit" :disabled="loading">Generate</button>
           <span class="ws-toolbar__spacer" />
-          <button v-if="exportEnabled" class="ws-button" type="button" :disabled="!canExport" @click="emit('export')"><Download :size="15" aria-hidden="true" /> Export CSV</button>
-          <button class="ws-button" type="button" :disabled="!canExport" @click="print"><Printer :size="15" aria-hidden="true" /> Print</button>
-          <slot name="filter-error" />
-        </form>
+          <slot name="date" />
+          <button v-if="exportEnabled" class="ws-button" type="button" :disabled="!canExport || loading" @click="emit('export')"><Download :size="15" aria-hidden="true" /> Export CSV</button>
+          <button class="ws-button" type="button" :disabled="!canExport || loading" @click="print"><Printer :size="15" aria-hidden="true" /> Print</button>
+        </div>
       </div>
 
       <div v-if="loading" class="ws-panel"><div class="ws-loading" role="status"><span class="ws-spinner" aria-hidden="true" />Loading ledger…</div></div>

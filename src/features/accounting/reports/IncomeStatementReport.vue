@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import AppSelect from '../../../components/ui/AppSelect.vue'
+import DateRangeFilter from '../../workspace/DateRangeFilter.vue'
 import { fiscalYearStartMonth } from '../../company/companyStore'
 import { incomeStatement, monthlyIncomeStatement, type MonthlyRow, type StatementSection } from './ledgerMath'
 import { amount, csvAmount, money, percent } from './reportFormat'
 import { exportReport } from './reportExport'
 import { describeRange, fiscalYearMonths, fiscalYearStartYear, monthLabel, parseIso, todayIso } from './reportPeriods'
-import PeriodFields from './PeriodFields.vue'
 import ReportFrame from './ReportFrame.vue'
 import StatementRows from './StatementRows.vue'
-import { usePeriodFilter } from './usePeriodFilter'
+import { useReportPeriod } from './useReportPeriod'
 import { useLedger } from './useLedger'
 
 const props = defineProps<{ variant: 'annual' | 'annual-simple' | 'monthly-simple' }>()
@@ -23,8 +23,8 @@ const title = computed(() => ({
 })[props.variant])
 
 // Annual variants: any date range, defaulting to the current fiscal year.
-const filter = usePeriodFilter('this-year')
-const statement = computed(() => incomeStatement(ledger.accounts.value, ledger.lines.value, filter.applied.value))
+const { range, defaultRange, presets } = useReportPeriod('this-year')
+const statement = computed(() => incomeStatement(ledger.accounts.value, ledger.lines.value, range.value))
 const margin = computed(() => statement.value.revenue.totalCents
   ? percent(statement.value.netIncomeCents / statement.value.revenue.totalCents * 100)
   : '—')
@@ -37,22 +37,16 @@ const yearOptions = computed(() => Array.from({ length: 5 }, (_, index) => {
   return { value: String(year), label: yearLabel(year) }
 }))
 const selectedYear = ref(String(currentFiscalYear))
-const appliedYear = ref(currentFiscalYear)
-const months = computed(() => fiscalYearMonths(appliedYear.value, fiscalYearStartMonth.value))
+const months = computed(() => fiscalYearMonths(Number(selectedYear.value), fiscalYearStartMonth.value))
 const monthly = computed(() => monthlyIncomeStatement(ledger.accounts.value, ledger.lines.value, months.value))
 
 const period = computed(() => {
-  if (!isMonthly.value) return `For the period ${describeRange(filter.applied.value)}`
-  return `${yearLabel(appliedYear.value)} · ${monthLabel(months.value[0], true)} to ${monthLabel(months.value[11], true)}`
+  if (!isMonthly.value) return `For the period ${describeRange(range.value)}`
+  return `${yearLabel(Number(selectedYear.value))} · ${monthLabel(months.value[0], true)} to ${monthLabel(months.value[11], true)}`
 })
 const hasData = computed(() => isMonthly.value
   ? monthly.value.revenue.length + monthly.value.expenses.length > 0
   : statement.value.revenue.groups.length + statement.value.expenses.groups.length > 0)
-
-function generate() {
-  if (isMonthly.value) appliedYear.value = Number(selectedYear.value)
-  else filter.apply()
-}
 
 function sectionRows(label: string, section: StatementSection): (string | number)[][] {
   const rows: (string | number)[][] = [[label.toLocaleUpperCase(), '', '']]
@@ -102,15 +96,13 @@ function exportCsv() {
     :issues="ledger.issues.value"
     :source-note="`${ledger.source.value.label} · Revenue and expense accounts grouped by account category. Net income is revenue less expenses; no other subtotals are assumed.`"
     :can-export="hasData"
-    @generate="generate"
     @export="exportCsv"
     @retry="ledger.reload"
   >
     <template #filters>
       <div v-if="isMonthly" class="ws-toolbar__field"><AppSelect id="is-year" v-model="selectedYear" :label="fiscalYearStartMonth === 1 ? 'Year' : 'Fiscal year'" :options="yearOptions" /></div>
-      <PeriodFields v-else :filter="filter" id-prefix="is" />
     </template>
-    <template #filter-error><p v-if="!isMonthly && filter.error.value" class="ws-toolbar__error" role="alert">{{ filter.error.value }}</p></template>
+    <template v-if="!isMonthly" #date><DateRangeFilter v-model="range" :default-value="defaultRange" :presets="presets" /></template>
     <template v-if="!isMonthly && hasData" #summary>
       <div class="acct-summary-tiles acct-report__summary">
         <div><span>Revenue</span><strong>{{ money(statement.revenue.totalCents) }}</strong></div>

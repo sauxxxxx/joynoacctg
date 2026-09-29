@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { Download, FileClock, Info, Search } from '@lucide/vue'
-import AppDatePicker from '../../components/ui/AppDatePicker.vue'
 import AppSelect from '../../components/ui/AppSelect.vue'
 import { downloadCsv } from '../accounting/reports/reportFormat'
+import DateRangeFilter from '../workspace/DateRangeFilter.vue'
 import { auditEvents, isAddOnEnabled, recordAudit } from './companyStore'
 import '../workspace/workspace.css'
 import './company.css'
@@ -12,8 +12,8 @@ const pageSize = 50
 const search = ref('')
 const module = ref('')
 const action = ref('')
-const from = ref('')
-const to = ref('')
+const allDates = { from: '', to: '' }
+const range = ref({ ...allDates })
 const shown = ref(pageSize)
 
 const localDay = (iso: string) => {
@@ -24,30 +24,27 @@ const timestamp = new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeSt
 const distinct = (key: 'module' | 'action') => [...new Set(auditEvents.value.map((event) => event[key]))].sort()
 const moduleOptions = computed(() => [{ value: '', label: 'All modules' }, ...distinct('module').map((value) => ({ value, label: value }))])
 const actionOptions = computed(() => [{ value: '', label: 'All actions' }, ...distinct('action').map((value) => ({ value, label: value }))])
-const rangeError = computed(() => from.value && to.value && from.value > to.value ? 'The end date must be on or after the start date.' : '')
 
 const filtered = computed(() => {
-  if (rangeError.value) return []
   const term = search.value.trim().toLocaleLowerCase()
   return auditEvents.value.filter((event) => {
     const day = localDay(event.at)
     if (module.value && event.module !== module.value) return false
     if (action.value && event.action !== action.value) return false
-    if (from.value && day < from.value) return false
-    if (to.value && day > to.value) return false
+    if (range.value.from && day < range.value.from) return false
+    if (range.value.to && day > range.value.to) return false
     return !term || `${event.user} ${event.reference} ${event.details}`.toLocaleLowerCase().includes(term)
   })
 })
 const visible = computed(() => filtered.value.slice(0, shown.value))
-const filtersActive = computed(() => Boolean(search.value || module.value || action.value || from.value || to.value))
-watch([search, module, action, from, to], () => { shown.value = pageSize })
+const filtersActive = computed(() => Boolean(search.value || module.value || action.value || range.value.from || range.value.to))
+watch([search, module, action, range], () => { shown.value = pageSize })
 
 function clear() {
   search.value = ''
   module.value = ''
   action.value = ''
-  from.value = ''
-  to.value = ''
+  range.value = { ...allDates }
 }
 
 function exportCsv() {
@@ -70,11 +67,9 @@ function exportCsv() {
           <label class="ws-search"><Search :size="16" aria-hidden="true" /><input v-model="search" type="search" placeholder="Search reference or details" aria-label="Search audit trail" /></label>
           <div class="ws-toolbar__field"><AppSelect id="audit-module" v-model="module" aria-label="Module" :options="moduleOptions" /></div>
           <div class="ws-toolbar__field"><AppSelect id="audit-action" v-model="action" aria-label="Action" :options="actionOptions" /></div>
-          <div class="ws-toolbar__field"><AppDatePicker id="audit-from" v-model="from" label="From" :invalid="Boolean(rangeError)" /></div>
-          <div class="ws-toolbar__field"><AppDatePicker id="audit-to" v-model="to" label="To" :invalid="Boolean(rangeError)" /></div>
           <span class="ws-toolbar__spacer" />
+          <DateRangeFilter v-model="range" :default-value="allDates" optional />
           <button v-if="isAddOnEnabled('report-csv-export')" class="ws-button" type="button" :disabled="!filtered.length" @click="exportCsv"><Download :size="15" aria-hidden="true" /> Export CSV</button>
-          <p v-if="rangeError" class="ws-toolbar__error" role="alert">{{ rangeError }}</p>
         </div>
 
         <div v-if="visible.length" class="ws-table-wrap">

@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { Pencil, Plus, Search, X } from '@lucide/vue'
 import { isAddOnEnabled, recordAudit } from '../company/companyStore'
 import { customers } from './customers/customerPreviewStore'
+import DateRangeFilter from '../workspace/DateRangeFilter.vue'
 import SalesBulkInvoices from './SalesBulkInvoices.vue'
 import { salesDocuments, setupRecords, type DocumentKind, type SalesDocument, type SalesLineItem } from './salesPreviewStore'
 import './sales-pages.css'
@@ -17,10 +18,9 @@ const titles: Record<DocumentKind, string> = {
 const pad = (value: number) => String(value).padStart(2, '0')
 const dateInput = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 const now = new Date()
-const fromDate = ref(dateInput(new Date(now.getFullYear(), now.getMonth(), 1)))
-const toDate = ref(dateInput(new Date(now.getFullYear(), now.getMonth() + 1, 0)))
+const defaultRange = { from: dateInput(new Date(now.getFullYear(), now.getMonth(), 1)), to: dateInput(new Date(now.getFullYear(), now.getMonth() + 1, 0)) }
+const dateRange = ref({ ...defaultRange })
 const customerFilter = ref('')
-const appliedFilters = ref({ from: fromDate.value, to: toDate.value, customerId: '' })
 const search = ref('')
 const statusFilter = ref('all')
 const dialog = ref<HTMLDialogElement | null>(null)
@@ -59,9 +59,9 @@ const records = computed(() => salesDocuments.value.filter((item) => item.kind =
 const visibleRecords = computed(() => {
   const term = search.value.trim().toLocaleLowerCase()
   return records.value.filter((item) => {
-    if (appliedFilters.value.from && item.date < appliedFilters.value.from) return false
-    if (appliedFilters.value.to && item.date > appliedFilters.value.to) return false
-    if (appliedFilters.value.customerId && item.customerId !== appliedFilters.value.customerId) return false
+    if (dateRange.value.from && item.date < dateRange.value.from) return false
+    if (dateRange.value.to && item.date > dateRange.value.to) return false
+    if (customerFilter.value && !isAcknowledgement.value && item.customerId !== customerFilter.value) return false
     if (statusFilter.value !== 'all' && item.status !== statusFilter.value) return false
     return !term || `${item.number} ${customerName(item.customerId)} ${item.status}`.toLocaleLowerCase().includes(term)
   })
@@ -92,14 +92,6 @@ function openForm(item?: SalesDocument) {
   dialog.value?.showModal()
 }
 function chooseDiscount() { draft.value.discountRate = selectedDiscount.value?.rate ?? 0 }
-function load() {
-  if (fromDate.value && toDate.value && fromDate.value > toDate.value) {
-    notice.value = 'From date must be on or before To date.'
-    return
-  }
-  appliedFilters.value = { from: fromDate.value, to: toDate.value, customerId: customerFilter.value }
-  notice.value = ''
-}
 function save() {
   const number = draft.value.number.trim()
   if (!number || !customers.value.some((customer) => customer.id === draft.value.customerId) || !draft.value.date) {
@@ -155,17 +147,13 @@ function onBulkSaved(count: number) {
         <div class="sales-panel__actions">
           <label class="sales-search"><Search :size="16" aria-hidden="true" /><input v-model="search" type="search" placeholder="Type to filter" :aria-label="`Search ${title}`" /></label>
           <select v-model="statusFilter" class="sales-status-filter" aria-label="Filter by status"><option value="all">All statuses</option><option>Draft</option><option v-if="isInvoice">Unpaid</option><option v-if="isInvoice">Paid</option><option v-if="!isInvoice">{{ isAcknowledgement ? 'Issued' : 'Posted' }}</option><option>Cancelled</option></select>
+          <select v-if="!isAcknowledgement" v-model="customerFilter" class="sales-status-filter" aria-label="Filter by customer"><option value="">All customers</option><option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select>
+          <DateRangeFilter v-model="dateRange" :default-value="defaultRange" />
           <button class="sales-button sales-button--primary" type="button" @click="openForm()"><Plus :size="16" aria-hidden="true" /> New {{ isInvoice ? 'invoice' : isAcknowledgement ? 'acknowledgement receipt' : 'receipt' }}</button>
           <button v-if="isInvoice && isAddOnEnabled('bulk-invoice-import')" class="sales-button" type="button" @click="bulkOpen = true">Add multiple</button>
         </div>
       </div>
-      <div class="sales-workspace">
-        <form class="sales-workspace__filters" @submit.prevent="load">
-          <label>From <input v-model="fromDate" type="date" required /></label>
-          <label>To <input v-model="toDate" type="date" required /></label>
-          <label v-if="!isAcknowledgement">Customer <select v-model="customerFilter"><option value="">All customers</option><option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select></label>
-          <button class="sales-button" type="submit">Load</button>
-        </form>
+      <div class="sales-workspace sales-workspace--single">
         <div class="sales-workspace__results">
           <div class="sales-table-wrap">
             <table class="sales-table">

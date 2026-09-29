@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, BarChart3, Info, RotateCw } from '@lucide/vue'
-import AppDatePicker from '../../../components/ui/AppDatePicker.vue'
 import AppSelect from '../../../components/ui/AppSelect.vue'
 import { fiscalYearStartMonth } from '../../company/companyStore'
 import type { AccountType } from '../reports/ledgerContract'
@@ -10,6 +9,7 @@ import { amount, money, percent } from '../reports/reportFormat'
 import { fiscalYearMonths, fiscalYearStartYear, formatLongDate, monthLabel, monthsEnding, parseIso, todayIso } from '../reports/reportPeriods'
 import type { AnalyticsPageId } from '../reports/reportPages'
 import { useLedger } from '../reports/useLedger'
+import DateRangeFilter from '../../workspace/DateRangeFilter.vue'
 import TrendChart from './TrendChart.vue'
 import '../../workspace/workspace.css'
 import './analytics.css'
@@ -29,14 +29,15 @@ const ledger = useLedger()
 const today = todayIso()
 
 // Balance views: position as of a date, with twelve month-end points ending there.
-const asOf = ref(today)
+const asOfDefault = { from: '', to: today }
+const asOfRange = ref({ ...asOfDefault })
 // Flow views: activity for one fiscal year, up to today.
 const currentFiscalYear = fiscalYearStartYear(parseIso(today), fiscalYearStartMonth.value)
 const yearLabel = (year: number) => fiscalYearStartMonth.value === 1 ? String(year) : `FY ${year}–${year + 1}`
 const yearOptions = computed(() => Array.from({ length: 5 }, (_, index) => ({ value: String(currentFiscalYear - index), label: yearLabel(currentFiscalYear - index) })))
 const year = ref(String(currentFiscalYear))
 
-const cap = computed(() => isBalance.value ? asOf.value || today : today)
+const cap = computed(() => isBalance.value ? asOfRange.value.to || today : today)
 const months = computed(() => isBalance.value
   ? monthsEnding(cap.value, 12)
   : fiscalYearMonths(Number(year.value), fiscalYearStartMonth.value).filter((month) => month <= today.slice(0, 7)))
@@ -103,10 +104,10 @@ const hasData = computed(() => section.value.groups.length > 0 || currentEarning
 
       <div class="ws-panel">
         <div class="ws-toolbar">
-          <div v-if="isBalance" class="ws-toolbar__field"><AppDatePicker :id="`${pageId}-as-of`" v-model="asOf" label="As of" :max="today" /></div>
-          <div v-else class="ws-toolbar__field"><AppSelect :id="`${pageId}-year`" v-model="year" :label="fiscalYearStartMonth === 1 ? 'Year' : 'Fiscal year'" :options="yearOptions" /></div>
+          <div v-if="!isBalance" class="ws-toolbar__field"><AppSelect :id="`${pageId}-year`" v-model="year" :label="fiscalYearStartMonth === 1 ? 'Year' : 'Fiscal year'" :options="yearOptions" /></div>
           <span class="ws-toolbar__spacer" />
-          <span class="ws-muted">{{ periodText }}</span>
+          <span class="ws-toolbar__summary">{{ periodText }}</span>
+          <DateRangeFilter v-if="isBalance" v-model="asOfRange" :default-value="asOfDefault" mode="as-of" :max="today" />
         </div>
       </div>
 

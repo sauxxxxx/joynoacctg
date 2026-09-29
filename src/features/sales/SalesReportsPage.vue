@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import DateRangeFilter from '../workspace/DateRangeFilter.vue'
 import { customers } from './customers/customerPreviewStore'
 import { salesDocuments } from './salesPreviewStore'
 import './sales-pages.css'
@@ -13,11 +14,12 @@ const isAging = computed(() => props.pageId === 'receivable-aging')
 const title = computed(() => isAging.value ? 'Receivable Aging' : 'Receivable Schedule')
 const pad = (value: number) => String(value).padStart(2, '0')
 const localDate = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
-const asOf = ref(localDate(new Date()))
+const defaultAsOf = { from: '', to: localDate(new Date()) }
+const asOfRange = ref({ ...defaultAsOf })
+const asOf = computed(() => asOfRange.value.to)
 const months = ref(3)
 const customerFilter = ref('')
-const previewed = ref(false)
-const error = ref('')
+const monthsError = computed(() => !isAging.value && (!Number.isInteger(Number(months.value)) || months.value < 1 || months.value > 36) ? 'Enter 1 to 36 months.' : '')
 const currency = (value: number) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(value)
 const utcDay = (date: string) => Date.parse(`${date}T00:00:00Z`) / 86_400_000
 
@@ -36,7 +38,7 @@ const balances = computed(() => {
 
 const scheduleRows = computed(() => {
   const start = new Date(`${asOf.value}T00:00:00`)
-  const targetMonth = start.getMonth() + Number(months.value)
+  const targetMonth = start.getMonth() + (monthsError.value ? 3 : Number(months.value))
   const lastDay = new Date(start.getFullYear(), targetMonth + 1, 0).getDate()
   const horizon = new Date(start.getFullYear(), targetMonth, Math.min(start.getDate(), lastDay))
   const endDate = localDate(horizon)
@@ -72,35 +74,27 @@ const totals = computed(() => agingRows.value.reduce((sum, row) => ({
   overNinety: sum.overNinety + row.overNinety,
 }), { balance: 0, current: 0, oneToThirty: 0, thirtyOneToSixty: 0, sixtyOneToNinety: 0, overNinety: 0 }))
 
-function preview() {
-  if (!asOf.value) { error.value = 'Choose an as-of date.'; return }
-  if (!isAging.value && (!Number.isInteger(Number(months.value)) || months.value < 1 || months.value > 36)) {
-    error.value = 'Enter 1 to 36 months.'
-    return
-  }
-  error.value = ''
-  previewed.value = true
-}
 </script>
 
 <template>
   <section class="sales-page" :aria-label="title">
     <p class="sales-preview-note">Frontend preview · This report uses unpaid invoices and posted receipts entered in this tab. Accounting integration will provide final balances.</p>
     <div class="sales-panel sales-report">
-      <div class="sales-panel__toolbar"><div><h2>{{ title }}</h2><p>{{ isAging ? 'See how long invoice balances have been outstanding.' : 'See receivables due in the selected period.' }}</p></div></div>
-      <div class="sales-workspace">
-        <form class="sales-workspace__filters" @submit.prevent="preview">
-          <label>As of <input v-model="asOf" type="date" required /></label>
+      <div class="sales-panel__toolbar">
+        <div><h2>{{ title }}</h2><p>{{ isAging ? 'See how long invoice balances have been outstanding.' : 'See receivables due in the selected period.' }}</p></div>
+        <div class="sales-panel__actions">
           <template v-if="!isAging">
-            <label>Month(s) <input v-model.number="months" type="number" min="1" max="36" step="1" required /></label>
-            <label>Customer <select v-model="customerFilter"><option value="">All customers</option><option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select></label>
+            <label class="sales-inline-field">Month(s) <input v-model.number="months" type="number" min="1" max="36" step="1" required :aria-invalid="Boolean(monthsError)" /></label>
+            <select v-model="customerFilter" class="sales-status-filter" aria-label="Filter by customer"><option value="">All customers</option><option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select>
           </template>
-          <button class="sales-button sales-button--primary" type="submit">Preview</button>
-          <p v-if="error" class="sales-form__error" role="alert">{{ error }}</p>
-        </form>
+          <DateRangeFilter v-model="asOfRange" :default-value="defaultAsOf" mode="as-of" />
+        </div>
+      </div>
+      <div class="sales-workspace sales-workspace--single">
         <div class="sales-workspace__results sales-report__results">
-          <div class="sales-report__heading"><h3>{{ isAging ? 'AR Aging' : 'Receivables' }}</h3><span v-if="previewed">As of {{ asOf }}</span></div>
-          <div v-if="!previewed" class="sales-empty"><strong>Choose your filters</strong><span>Select Preview to generate the report.</span></div>
+          <div class="sales-report__heading"><h3>{{ isAging ? 'AR Aging' : 'Receivables' }}</h3><span>As of {{ asOf }}</span></div>
+          <p v-if="monthsError" class="sales-form__error" role="alert">{{ monthsError }}</p>
+          <div v-else-if="!(isAging ? agingRows.length : scheduleRows.length)" class="sales-empty"><strong>No outstanding balances</strong><span>No unpaid invoices {{ isAging ? 'are open' : 'fall due in this period' }} as of {{ asOf }}.</span></div>
           <template v-else-if="isAging">
             <div class="sales-table-wrap"><table class="sales-table sales-report__table"><thead><tr><th>Customer</th><th>Invoice #</th><th class="sales-table__number">Balance</th><th class="sales-table__number">Current</th><th class="sales-table__number">1–30 Days</th><th class="sales-table__number">31–60 Days</th><th class="sales-table__number">61–90 Days</th><th class="sales-table__number">91+ Days</th></tr></thead>
               <tbody><tr v-for="row in agingRows" :key="row.invoiceId"><td>{{ row.name }}</td><td>{{ row.invoiceNumber }}</td><td class="sales-table__number">{{ currency(row.balance) }}</td><td class="sales-table__number">{{ currency(row.current) }}</td><td class="sales-table__number">{{ currency(row.oneToThirty) }}</td><td class="sales-table__number">{{ currency(row.thirtyOneToSixty) }}</td><td class="sales-table__number">{{ currency(row.sixtyOneToNinety) }}</td><td class="sales-table__number">{{ currency(row.overNinety) }}</td></tr></tbody>

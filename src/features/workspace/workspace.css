@@ -28,6 +28,7 @@
 .ws-toolbar__field { width: 190px; min-width: 0; }
 .ws-toolbar__field--wide { width: 260px; }
 .ws-toolbar__spacer { flex: 1; }
+.ws-toolbar__summary { align-self: center; color: #7d8790; font-size: 12px; }
 .ws-toolbar .ws-check { min-height: 38px; }
 .ws-toolbar__error { flex-basis: 100%; margin: 0; color: #9b303a; font-size: 12px; }
 
@@ -123,6 +124,19 @@
 .ws-tabs button { min-height: 30px; padding: 4px 11px; border: 0; border-radius: 5px; background: transparent; color: #5c6770; font-size: 12px; font-weight: 650; }
 .ws-tabs button[aria-pressed='true'] { background: #fff; color: #1f272d; box-shadow: 0 1px 2px rgba(20, 30, 40, .12); }
 
+/* Date filter popover: same look and behavior as the Purchase Journal date filter. */
+.ws-date-control { position: relative; flex: 0 0 auto; }
+.ws-date-control__toggle { position: relative; width: 38px; padding: 0; }
+.ws-date-control__toggle[aria-expanded='true'] { background: #edf2f5; border-color: #a7b8c3; }
+.ws-date-control__indicator { position: absolute; top: 5px; right: 5px; width: 5px; height: 5px; border-radius: 50%; background: #467b9b; }
+.ws-date-filter { position: absolute; z-index: 30; top: calc(100% + 8px); right: 0; width: 300px; padding: 18px; border: 1px solid #d6dde1; border-radius: 7px; background: #fff; box-shadow: 0 12px 30px rgba(22, 30, 36, .16); text-align: left; }
+.ws-date-filter__heading { display: flex; align-items: center; gap: 9px; margin-bottom: 18px; color: #5a646d; }
+.ws-date-filter__heading h2 { margin: 0; color: #293138; font-size: 13px; font-weight: 650; }
+.ws-date-filter form { display: flex; flex-direction: column; }
+.ws-date-filter .ui-date-picker, .ws-date-filter .ui-select { margin-bottom: 15px; }
+.ws-date-filter__error { margin: -3px 0 13px; color: #b63838; font-size: 11px; line-height: 1.4; }
+.ws-date-filter__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 3px; }
+
 .ws-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
 
 @media (max-width: 760px) {
@@ -133,6 +147,11 @@
   .ws-search { flex: 1; min-width: 0; }
   .ws-form { grid-template-columns: 1fr; }
   .ws-dialog__header, .ws-dialog__body, .ws-dialog__footer { padding-left: 16px; padding-right: 16px; }
+}
+@media (max-width: 700px) {
+  .ws-date-control__toggle { width: 44px; min-height: 44px; }
+  .ws-date-filter { width: min(300px, calc(100vw - 40px)); }
+  .ws-date-filter__actions .ws-button { min-height: 44px; }
 }
 @media (max-width: 480px) {
   .ws-toolbar__field, .ws-toolbar__field--wide { width: 100%; }

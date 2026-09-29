@@ -1,30 +1,23 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import AppDatePicker from '../../../components/ui/AppDatePicker.vue'
 import { reportingSettings } from '../../company/companyStore'
+import DateRangeFilter from '../../workspace/DateRangeFilter.vue'
 import { accountTypeLabels } from './ledgerContract'
 import { trialBalance } from './ledgerMath'
 import { amount, amountOrBlank, csvAmount } from './reportFormat'
 import { exportReport } from './reportExport'
-import { formatLongDate, todayIso } from './reportPeriods'
+import { formatLongDate } from './reportPeriods'
 import BalanceCheck from './BalanceCheck.vue'
 import ReportFrame from './ReportFrame.vue'
+import { useAsOfDate } from './useReportPeriod'
 import { useLedger } from './useLedger'
 
 const ledger = useLedger()
-const asOf = ref(todayIso())
+const { range, defaultRange, asOf } = useAsOfDate()
 const includeZero = ref(reportingSettings.value.includeZeroBalances)
-const applied = ref({ asOf: asOf.value, includeZero: includeZero.value })
-const filterError = ref('')
 
-const report = computed(() => trialBalance(ledger.accounts.value, ledger.lines.value, applied.value.asOf, applied.value.includeZero))
-const period = computed(() => `As of ${formatLongDate(applied.value.asOf)}`)
-
-function generate() {
-  if (!asOf.value) { filterError.value = 'Choose an as-of date.'; return }
-  filterError.value = ''
-  applied.value = { asOf: asOf.value, includeZero: includeZero.value }
-}
+const report = computed(() => trialBalance(ledger.accounts.value, ledger.lines.value, asOf.value, includeZero.value))
+const period = computed(() => `As of ${formatLongDate(asOf.value)}`)
 
 function exportCsv() {
   exportReport('Trial Balance', period.value, [
@@ -44,15 +37,13 @@ function exportCsv() {
     :issues="ledger.issues.value"
     :source-note="`${ledger.source.value.label} · Net balance of each account from posted entries up to the as-of date.`"
     :can-export="report.rows.length > 0"
-    @generate="generate"
     @export="exportCsv"
     @retry="ledger.reload"
   >
     <template #filters>
-      <div class="ws-toolbar__field"><AppDatePicker id="tb-as-of" v-model="asOf" label="As of" required :invalid="Boolean(filterError)" /></div>
       <label class="ws-check"><input v-model="includeZero" type="checkbox" /> Include zero balances</label>
     </template>
-    <template #filter-error><p v-if="filterError" class="ws-toolbar__error" role="alert">{{ filterError }}</p></template>
+    <template #date><DateRangeFilter v-model="range" :default-value="defaultRange" mode="as-of" /></template>
     <template #summary>
       <BalanceCheck
         :balanced="report.differenceCents === 0"
@@ -66,7 +57,7 @@ function exportCsv() {
       />
     </template>
 
-    <div v-if="!report.rows.length" class="ws-empty"><strong>No balances to show</strong><span>No posted entries exist up to {{ formatLongDate(applied.asOf) }}. Try a later date.</span></div>
+    <div v-if="!report.rows.length" class="ws-empty"><strong>No balances to show</strong><span>No posted entries exist up to {{ formatLongDate(asOf) }}. Try a later date.</span></div>
     <div v-else class="ws-table-wrap">
       <table class="ws-table">
         <thead><tr><th scope="col">Code</th><th scope="col">Account</th><th scope="col">Type</th><th scope="col" class="ws-num">Debit</th><th scope="col" class="ws-num">Credit</th></tr></thead>

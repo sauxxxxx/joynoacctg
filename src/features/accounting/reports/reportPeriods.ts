@@ -75,17 +75,18 @@ export function presetRange(preset: Exclude<PeriodPreset, 'custom'>, todayValue:
   }
 }
 
-export function presetOptions(fiscalStartMonth: number) {
+/** Named ranges for the date filter's Period list. */
+export function periodPresets(todayValue: string, fiscalStartMonth: number): { value: PeriodPreset; label: string; range: IsoRange }[] {
   const fiscal = fiscalStartMonth !== 1
-  return [
-    { value: 'this-month', label: 'This month' },
-    { value: 'last-month', label: 'Last month' },
-    { value: 'this-quarter', label: 'This quarter' },
-    { value: 'year-to-date', label: fiscal ? 'Fiscal year to date' : 'Year to date' },
-    { value: 'this-year', label: fiscal ? 'This fiscal year' : 'This year' },
-    { value: 'last-year', label: fiscal ? 'Last fiscal year' : 'Last year' },
-    { value: 'custom', label: 'Custom range' },
+  const labels: [Exclude<PeriodPreset, 'custom'>, string][] = [
+    ['this-month', 'This month'],
+    ['last-month', 'Last month'],
+    ['this-quarter', 'This quarter'],
+    ['year-to-date', fiscal ? 'Fiscal year to date' : 'Year to date'],
+    ['this-year', fiscal ? 'This fiscal year' : 'This year'],
+    ['last-year', fiscal ? 'Last fiscal year' : 'Last year'],
   ]
+  return labels.map(([value, label]) => ({ value, label, range: presetRange(value, todayValue, fiscalStartMonth) }))
 }
 
 export function describeRange(range: IsoRange): string {

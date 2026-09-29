@@ -3,31 +3,26 @@ import { computed, ref } from 'vue'
 import { ReceiptText } from '@lucide/vue'
 import { customers } from '../../sales/customers/customerPreviewStore'
 import { salesDocuments } from '../../sales/salesPreviewStore'
+import DateRangeFilter from '../../workspace/DateRangeFilter.vue'
 import { amount, csvAmount, money } from './reportFormat'
 import { exportReport } from './reportExport'
 import { describeRange, monthLabel } from './reportPeriods'
-import PeriodFields from './PeriodFields.vue'
 import ReportFrame from './ReportFrame.vue'
 import { includedInvoices, summarizeSales, type SalesGrouping, type SalesSummaryRow } from './salesSummary'
-import { usePeriodFilter } from './usePeriodFilter'
+import { useReportPeriod } from './useReportPeriod'
 
 const emit = defineEmits<{ navigate: [pageId: string] }>()
-const filter = usePeriodFilter('year-to-date')
+const { range, defaultRange, presets } = useReportPeriod('year-to-date')
 const grouping = ref<SalesGrouping>('customer')
 const includeDrafts = ref(false)
-const appliedDrafts = ref(false)
 
 const customerName = (id: string) => customers.value.find((customer) => customer.id === id)?.name ?? 'Unknown customer'
-const invoices = computed(() => includedInvoices(salesDocuments.value, filter.applied.value, appliedDrafts.value))
+const invoices = computed(() => includedInvoices(salesDocuments.value, range.value, includeDrafts.value))
 const summary = computed(() => summarizeSales(invoices.value, grouping.value, (invoice) =>
   grouping.value === 'month' ? monthLabel(invoice.date.slice(0, 7), true) : customerName(invoice.customerId)))
 const hasInvoices = computed(() => salesDocuments.value.some((item) => item.kind === 'sales-invoices'))
-const period = computed(() => `For the period ${describeRange(filter.applied.value)}`)
+const period = computed(() => `For the period ${describeRange(range.value)}`)
 const groupLabel = computed(() => grouping.value === 'month' ? 'Month' : 'Customer')
-
-function generate() {
-  if (filter.apply()) appliedDrafts.value = includeDrafts.value
-}
 
 const csvRow = (row: SalesSummaryRow) => [row.label, row.invoiceCount, csvAmount(row.grossCents), csvAmount(row.discountCents), csvAmount(row.netCents), csvAmount(row.vatCents), csvAmount(row.withholdingCents)]
 
@@ -46,11 +41,9 @@ function exportCsv() {
     :period="period"
     source-note="From Sales › Invoices entered in this tab. Includes Unpaid and Paid invoices (drafts optional, cancelled never). VAT and withholding are listed as entered and are not added to net sales."
     :can-export="summary.rows.length > 0"
-    @generate="generate"
     @export="exportCsv"
   >
     <template #filters>
-      <PeriodFields :filter="filter" id-prefix="sos" />
       <div class="ws-field">
         <span>Group by</span>
         <div class="ws-tabs" role="group" aria-label="Group by">
@@ -60,7 +53,7 @@ function exportCsv() {
       </div>
       <label class="ws-check"><input v-model="includeDrafts" type="checkbox" /> Include drafts</label>
     </template>
-    <template #filter-error><p v-if="filter.error.value" class="ws-toolbar__error" role="alert">{{ filter.error.value }}</p></template>
+    <template #date><DateRangeFilter v-model="range" :default-value="defaultRange" :presets="presets" /></template>
     <template v-if="summary.rows.length" #summary>
       <div class="acct-summary-tiles acct-report__summary">
         <div><span>Net sales</span><strong>{{ money(summary.total.netCents) }}</strong><small>Before tax</small></div>
