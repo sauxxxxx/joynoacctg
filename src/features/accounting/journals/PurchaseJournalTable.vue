@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { ArrowUpRight, SearchX } from '@lucide/vue'
 import { computed } from 'vue'
-import { formatJournalDate, formatPesos, type PurchaseJournalEntry } from './purchaseJournalData'
+import { formatJournalAmount, formatJournalDate, type PurchaseJournalEntry } from './purchaseJournalData'
 
 const props = defineProps<{
   entries: PurchaseJournalEntry[]
   selectedIds: string[]
   reviewMode: boolean
-  totalCount: number
 }>()
 
 const emit = defineEmits<{
@@ -19,6 +18,7 @@ const emit = defineEmits<{
 
 const allSelected = computed(() => props.entries.length > 0 && props.entries.every((entry) => props.selectedIds.includes(entry.id)))
 const someSelected = computed(() => props.entries.some((entry) => props.selectedIds.includes(entry.id)))
+const totalAmountCents = computed(() => props.entries.reduce((total, entry) => total + entry.amountCents, 0))
 </script>
 
 <template>
@@ -26,6 +26,13 @@ const someSelected = computed(() => props.entries.some((entry) => props.selected
     <p class="journal-results__mobile-hint">Swipe the table to see payee and amount.</p>
     <div class="journal-results__scroll">
       <table class="journal-table">
+        <colgroup>
+          <col class="journal-table__col-check" /><col class="journal-table__col-number" />
+          <col class="journal-table__col-reference" /><col class="journal-table__col-date" />
+          <col class="journal-table__col-payee" /><col class="journal-table__col-amount" />
+          <col class="journal-table__col-status" /><col class="journal-table__col-remarks" />
+          <col class="journal-table__col-created" />
+        </colgroup>
         <thead>
           <tr>
             <th class="journal-table__check">
@@ -42,7 +49,10 @@ const someSelected = computed(() => props.entries.some((entry) => props.selected
             <th scope="col">Invoice / Receipt #</th>
             <th scope="col">Date</th>
             <th scope="col">Payee</th>
-            <th scope="col" class="journal-table__amount">Total amount</th>
+            <th scope="col" class="journal-table__amount">Total Amount</th>
+            <th scope="col">Status</th>
+            <th scope="col">Remarks</th>
+            <th scope="col">Created By</th>
           </tr>
         </thead>
         <tbody>
@@ -50,21 +60,24 @@ const someSelected = computed(() => props.entries.some((entry) => props.selected
             <td class="journal-table__check">
               <input
                 type="checkbox"
-                :aria-label="`Select ${entry.journalNumber}`"
+                :aria-label="`Select ${entry.referenceNumber}`"
                 :checked="selectedIds.includes(entry.id)"
                 :disabled="!reviewMode"
                 @change="emit('toggle', entry.id)"
               />
             </td>
+            <td class="journal-table__journal-number">{{ entry.journalNumber }}</td>
             <td>
-              <button class="journal-table__reference" type="button" :aria-label="`View ${entry.journalNumber}`" @click="emit('open', entry)">
-                {{ entry.journalNumber }} <ArrowUpRight :size="13" aria-hidden="true" />
+              <button class="journal-table__reference" type="button" :aria-label="`View ${entry.referenceNumber}`" @click="emit('open', entry)">
+                {{ entry.referenceNumber }} <ArrowUpRight :size="13" aria-hidden="true" />
               </button>
             </td>
-            <td>{{ entry.referenceNumber }}</td>
             <td class="journal-table__date">{{ formatJournalDate(entry.date) }}</td>
-            <td>{{ entry.payee }}</td>
-            <td class="journal-table__amount">{{ formatPesos(entry.amountCents) }}</td>
+            <td><span class="journal-table__truncate" :title="entry.payee">{{ entry.payee }}</span></td>
+            <td class="journal-table__amount">{{ formatJournalAmount(entry.amountCents) }}</td>
+            <td><span class="journal-table__status">{{ entry.status }}</span></td>
+            <td><span class="journal-table__truncate" :title="entry.remarks">{{ entry.remarks }}</span></td>
+            <td>{{ entry.createdBy }}</td>
           </tr>
         </tbody>
       </table>
@@ -74,10 +87,11 @@ const someSelected = computed(() => props.entries.some((entry) => props.selected
         <p>Try another date range or search term.</p>
         <button type="button" @click="emit('reset')">Reset filters</button>
       </div>
-    </div>
-    <div class="journal-results__footer">
-      <span>Showing {{ entries.length }} of {{ totalCount }} sample entries</span>
-      <span v-if="reviewMode">{{ selectedIds.length }} selected</span>
+      <div class="journal-results__footer" role="status">
+        <span class="journal-results__count"><span class="journal-results__sr-only">Entries: </span>{{ entries.length }}</span>
+        <span class="journal-results__total"><span class="journal-results__sr-only">Total amount: </span>{{ formatJournalAmount(totalAmountCents) }}</span>
+        <span v-if="reviewMode" class="journal-results__selection">{{ selectedIds.length }} selected</span>
+      </div>
     </div>
   </div>
 </template>

@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { CalendarDays, Filter, Search } from '@lucide/vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { CalendarDays, Search } from '@lucide/vue'
 import { z } from 'zod'
 import AppDatePicker from '../../../components/ui/AppDatePicker.vue'
 import PurchaseJournalDetail from './PurchaseJournalDetail.vue'
 import PurchaseJournalTable from './PurchaseJournalTable.vue'
-import { currentMonthRange, samplePurchaseJournalEntries, type PurchaseJournalEntry } from './purchaseJournalData'
+import { sampleJournalRange, samplePurchaseJournalEntries, type PurchaseJournalEntry } from './purchaseJournalData'
 import './purchaseJournal.css'
 
 const dateRangeSchema = z.object({
@@ -13,7 +13,7 @@ const dateRangeSchema = z.object({
   to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Choose a valid end date.'),
 }).refine((range) => range.from <= range.to, { message: 'The end date must be on or after the start date.', path: ['to'] })
 
-const initialRange = currentMonthRange()
+const initialRange = sampleJournalRange()
 const fromDate = ref(initialRange.from)
 const toDate = ref(initialRange.to)
 const appliedRange = ref({ ...initialRange })
@@ -21,6 +21,8 @@ const dateError = ref('')
 const searchTerm = ref('')
 const reviewMode = ref(false)
 const filtersOpen = ref(false)
+const filterControl = ref<HTMLElement | null>(null)
+const filterButton = ref<HTMLButtonElement | null>(null)
 const selectedIds = ref<string[]>([])
 const activeEntry = ref<PurchaseJournalEntry | null>(null)
 
@@ -28,7 +30,7 @@ const entries = computed(() => {
   const query = searchTerm.value.trim().toLocaleLowerCase()
   return samplePurchaseJournalEntries.filter((entry) => {
     const inRange = entry.date >= appliedRange.value.from && entry.date <= appliedRange.value.to
-    const matches = !query || [entry.journalNumber, entry.referenceNumber, entry.payee]
+    const matches = !query || [entry.journalNumber, entry.referenceNumber, entry.payee, entry.status, entry.remarks, entry.createdBy]
       .some((value) => value.toLocaleLowerCase().includes(query))
     return inRange && matches
   })
@@ -53,17 +55,52 @@ function loadRange() {
   appliedRange.value = result.data
   selectedIds.value = []
   filtersOpen.value = false
+  nextTick(() => filterButton.value?.focus())
 }
 
-function resetFilters() {
-  const range = currentMonthRange()
+function restoreDefaultRange() {
+  const range = sampleJournalRange()
   fromDate.value = range.from
   toDate.value = range.to
   appliedRange.value = range
-  searchTerm.value = ''
   dateError.value = ''
   selectedIds.value = []
 }
+
+function resetFilters() {
+  restoreDefaultRange()
+  searchTerm.value = ''
+  filtersOpen.value = false
+}
+
+function resetDateRange() {
+  restoreDefaultRange()
+  filtersOpen.value = false
+  nextTick(() => filterButton.value?.focus())
+}
+
+function onOutsidePointer(event: PointerEvent) {
+  const target = event.target
+  if (!filtersOpen.value || !(target instanceof Node)) return
+  if (filterControl.value?.contains(target)) return
+  if (target instanceof Element && target.closest('.ui-date-picker__panel')) return
+  filtersOpen.value = false
+}
+
+function onFilterKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Escape' || !filtersOpen.value) return
+  filtersOpen.value = false
+  filterButton.value?.focus()
+}
+
+onMounted(() => {
+  document.addEventListener('pointerdown', onOutsidePointer)
+  document.addEventListener('keydown', onFilterKeydown)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onOutsidePointer)
+  document.removeEventListener('keydown', onFilterKeydown)
+})
 
 function toggleSelection(id: string) {
   selectedIds.value = selectedIds.value.includes(id)
@@ -94,30 +131,36 @@ function toggleAll() {
           <Search :size="16" aria-hidden="true" />
           <input v-model="searchTerm" type="search" placeholder="Search journal entries..." aria-label="Search purchase journal entries" />
         </label>
-        <button class="journal-button journal-button--secondary journal-page__filter-toggle" type="button" :aria-expanded="filtersOpen" @click="filtersOpen = !filtersOpen">
-          <Filter :size="16" aria-hidden="true" /> Filters
-        </button>
+        <div ref="filterControl" class="journal-date-control">
+          <button ref="filterButton" class="journal-button journal-button--secondary journal-date-control__toggle" type="button"
+            :aria-expanded="filtersOpen" aria-controls="journal-date-filter"
+            :aria-label="`Date range: ${appliedRange.from} to ${appliedRange.to}`" title="Date range"
+            @click="filtersOpen = !filtersOpen">
+            <CalendarDays :size="17" aria-hidden="true" />
+            <span class="journal-date-control__indicator" aria-hidden="true" />
+          </button>
+          <div v-if="filtersOpen" id="journal-date-filter" class="journal-date-filter" role="group" aria-label="Date range filters">
+            <div class="journal-date-filter__heading"><CalendarDays :size="17" aria-hidden="true" /><h2>Date range</h2></div>
+            <form @submit.prevent="loadRange">
+              <AppDatePicker id="journal-from" v-model="fromDate" label="From" required :invalid="Boolean(dateError)" />
+              <AppDatePicker id="journal-to" v-model="toDate" label="To" required :invalid="Boolean(dateError)" />
+              <p v-if="dateError" class="journal-date-filter__error" role="alert">{{ dateError }}</p>
+              <div class="journal-date-filter__actions">
+                <button class="journal-button journal-button--secondary" type="button" @click="resetDateRange">Reset</button>
+                <button class="journal-button journal-button--primary" type="submit">Apply dates</button>
+              </div>
+            </form>
+          </div>
+        </div>
         <button class="journal-button journal-button--primary" type="button" disabled title="Journal transfers are not available in this frontend preview.">Move to CDJ</button>
       </div>
     </div>
 
     <div class="journal-workarea">
-      <aside class="journal-filters" :class="{ 'journal-filters--open': filtersOpen }" aria-label="Date filters">
-        <div class="journal-filters__heading"><CalendarDays :size="17" aria-hidden="true" /><h2>Date range</h2></div>
-        <form @submit.prevent="loadRange">
-          <AppDatePicker id="journal-from" v-model="fromDate" label="From" required :invalid="Boolean(dateError)" />
-          <AppDatePicker id="journal-to" v-model="toDate" label="To" required :invalid="Boolean(dateError)" />
-          <p v-if="dateError" class="journal-filters__error" role="alert">{{ dateError }}</p>
-          <button class="journal-button journal-button--primary journal-filters__load" type="submit">Load</button>
-        </form>
-        <p class="journal-filters__hint">The table updates when you load a date range.</p>
-      </aside>
-
       <PurchaseJournalTable
         :entries="entries"
         :selected-ids="selectedIds"
         :review-mode="reviewMode"
-        :total-count="samplePurchaseJournalEntries.length"
         @toggle="toggleSelection"
         @toggle-all="toggleAll"
         @open="activeEntry = $event"

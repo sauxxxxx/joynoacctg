@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
 import { X } from '@lucide/vue'
-import { formatJournalDate, formatPesos, type PurchaseJournalEntry } from './purchaseJournalData'
+import { formatJournalAmount, formatJournalDate, type PurchaseJournalEntry } from './purchaseJournalData'
 
 const props = defineProps<{ entry: PurchaseJournalEntry | null }>()
 const emit = defineEmits<{ close: [] }>()
@@ -25,7 +25,7 @@ function closeOnBackdrop(event: MouseEvent) {
         <header class="journal-detail__header">
           <div>
             <span class="journal-detail__eyebrow">Purchase Journal</span>
-            <h2>{{ entry.journalNumber }}</h2>
+            <h2>{{ entry.journalNumber || entry.referenceNumber }}</h2>
           </div>
           <button class="icon-button" type="button" aria-label="Close details" @click="emit('close')"><X :size="19" aria-hidden="true" /></button>
         </header>
@@ -35,7 +35,10 @@ function closeOnBackdrop(event: MouseEvent) {
             <div><dt>Invoice / Receipt #</dt><dd>{{ entry.referenceNumber }}</dd></div>
             <div><dt>Date</dt><dd>{{ formatJournalDate(entry.date) }}</dd></div>
             <div><dt>Payee</dt><dd>{{ entry.payee }}</dd></div>
-            <div><dt>Total amount</dt><dd>{{ formatPesos(entry.amountCents) }}</dd></div>
+            <div><dt>Total amount</dt><dd>{{ formatJournalAmount(entry.amountCents) }}</dd></div>
+            <div><dt>Status</dt><dd>{{ entry.status }}</dd></div>
+            <div><dt>Remarks</dt><dd>{{ entry.remarks }}</dd></div>
+            <div><dt>Created By</dt><dd>{{ entry.createdBy }}</dd></div>
           </dl>
         </div>
         <footer class="journal-detail__footer">
