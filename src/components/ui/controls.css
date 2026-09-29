@@ -1,0 +1,50 @@
+.ui-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+.ui-control-label { display: block; margin-bottom: 7px; color: #5f6971; font-size: 11px; font-weight: 600; }
+.ui-control-label span { color: #b63838; }
+.ui-control-trigger { width: 100%; min-height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 10px; border: 1px solid #cbd3d8; border-radius: 5px; background: #fff; color: #2e353b; text-align: left; font-size: 12px; }
+.ui-control-trigger:hover:not(:disabled) { border-color: #85929b; }
+.ui-control-trigger:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.ui-control-trigger[aria-invalid='true'] { border-color: #b63838; }
+.ui-control-trigger:disabled { background: #f3f5f6; color: #879097; cursor: not-allowed; }
+.ui-control-trigger svg { flex: 0 0 auto; color: #58636b; }
+
+.ui-select { position: relative; min-width: 0; }
+.ui-select__trigger { cursor: pointer; }
+.ui-select__trigger > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-select__placeholder, .ui-date-picker__placeholder { color: #69727b; }
+.ui-select__list { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; width: max(100%, 150px); max-height: 224px; margin: 0; padding: 4px; overflow-y: auto; border: 1px solid #d7dde1; border-radius: 6px; background: #fff; box-shadow: 0 10px 24px rgba(22, 30, 36, .14); list-style: none; scrollbar-width: thin; }
+.ui-select__option { min-height: 34px; display: flex; align-items: center; padding: 6px 9px; border-radius: 4px; color: #303940; cursor: pointer; font-size: 12px; }
+.ui-select__option--active { background: #edf2f5; }
+.ui-select__option[aria-selected='true'] { font-weight: 700; }
+.ui-select__option[aria-disabled='true'] { color: #929ba2; cursor: not-allowed; }
+.ui-select--compact { flex: 1; }
+.ui-select--compact .ui-control-trigger { min-height: 30px; padding: 0 5px; border-color: transparent; font-weight: 600; }
+.ui-select--compact .ui-control-trigger:hover, .ui-select--compact .ui-control-trigger[aria-expanded='true'] { background: #f3f5f6; }
+
+.ui-date-picker { min-width: 0; }
+.ui-date-picker__trigger { cursor: pointer; font-variant-numeric: tabular-nums; }
+.ui-date-picker__panel { position: fixed; z-index: 100; width: min(320px, calc(100vw - 16px)); padding: 12px; border: 1px solid #d6dde1; border-radius: 7px; background: #fff; box-shadow: 0 12px 30px rgba(22, 30, 36, .16); }
+.ui-date-picker__header { display: flex; align-items: center; gap: 2px; margin-bottom: 10px; }
+.ui-date-picker__header > button { width: 28px; height: 30px; display: grid; flex: 0 0 auto; place-items: center; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #414c54; }
+.ui-date-picker__header > button:hover:not(:disabled) { background: #edf2f5; }
+.ui-date-picker__header > button:disabled { color: #b2bac0; cursor: not-allowed; }
+.ui-date-picker__year { padding: 0 3px; color: #303940; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ui-date-picker__grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
+.ui-date-picker__weekday { display: grid; min-height: 28px; place-items: center; color: #748089; font-size: 10px; font-weight: 700; }
+.ui-date-picker__day { min-width: 0; height: 38px; padding: 0; border: 1px solid transparent; border-radius: 5px; background: transparent; color: #303940; font-size: 12px; font-variant-numeric: tabular-nums; }
+.ui-date-picker__day:hover:not(:disabled) { background: #edf2f5; }
+.ui-date-picker__day--outside { color: #9aa4ab; }
+.ui-date-picker__day--today { border-color: #8797a2; }
+.ui-date-picker__day--selected, .ui-date-picker__day--selected:hover:not(:disabled) { background: #2e353b; color: #fff; }
+.ui-date-picker__day:disabled { color: #b6bec3; cursor: not-allowed; }
+.ui-date-picker__day:focus-visible, .ui-date-picker__header button:focus-visible, .ui-date-picker__footer button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.ui-date-picker__footer { display: flex; justify-content: space-between; gap: 8px; margin-top: 9px; padding-top: 8px; border-top: 1px solid #edf0f1; }
+.ui-date-picker__footer button { min-height: 30px; padding: 0 7px; border: 0; border-radius: 4px; background: transparent; color: #305e7b; font-size: 11px; font-weight: 600; }
+.ui-date-picker__footer button:hover:not(:disabled) { background: #edf2f5; }
+.ui-date-picker__footer button:disabled { color: #9da7ae; cursor: not-allowed; }
+.ui-date-picker__footer button:last-child { margin-left: auto; }
+
+@media (max-width: 600px) {
+  .ui-select__option { min-height: 42px; }
+  .ui-date-picker__day { height: 40px; }
+}
