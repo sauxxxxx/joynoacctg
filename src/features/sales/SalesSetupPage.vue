@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Pencil, Plus, Search, Trash2, X } from '@lucide/vue'
+import { recordAudit } from '../company/companyStore'
 import { salesDocuments, setupRecords, type SetupKind, type SetupRecord } from './salesPreviewStore'
 import './sales-pages.css'
 
@@ -57,6 +58,7 @@ function save() {
     ? setupRecords.value.map((record) => record.id === item.id ? item : record)
     : [...setupRecords.value, item]
   notice.value = `${title.value.slice(0, -1)} ${draft.value.id ? 'updated' : 'added'}.`
+  recordAudit('Sales', draft.value.id ? 'Updated' : 'Created', `${title.value.slice(0, -1)}: ${item.name}`)
   dialog.value?.close()
 }
 
@@ -75,6 +77,7 @@ function remove() {
   if (!deleting.value) return
   setupRecords.value = setupRecords.value.filter((item) => item.id !== deleting.value?.id)
   notice.value = `${deleting.value.name} deleted.`
+  recordAudit('Sales', 'Deleted', `${title.value.slice(0, -1)}: ${deleting.value.name}`)
   deleteDialog.value?.close()
   deleting.value = null
 }

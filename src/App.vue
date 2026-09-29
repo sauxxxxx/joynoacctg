@@ -3,6 +3,11 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppSidebar from './components/AppSidebar.vue'
 import AppTopbar from './components/AppTopbar.vue'
 import PurchaseJournalPage from './features/accounting/journals/PurchaseJournalPage.vue'
+import AccountingReportsPage from './features/accounting/reports/AccountingReportsPage.vue'
+import { accountingReportPageIds, analyticsPageIds, asPageId } from './features/accounting/reports/reportPages'
+import AnalyticsPage from './features/accounting/analytics/AnalyticsPage.vue'
+import CompanyPage from './features/company/CompanyPage.vue'
+import { companyPageIds } from './features/company/companyPages'
 import CustomersPage from './features/sales/customers/CustomersPage.vue'
 import SalesDocumentsPage from './features/sales/SalesDocumentsPage.vue'
 import SalesReportsPage from './features/sales/SalesReportsPage.vue'
@@ -21,6 +26,9 @@ const reportIds = ['receivable-schedule', 'receivable-aging'] as const
 const documentPageId = computed(() => documentIds.find((id) => id === activeId.value))
 const setupPageId = computed(() => setupIds.find((id) => id === activeId.value))
 const reportPageId = computed(() => reportIds.find((id) => id === activeId.value))
+const accountingReportId = computed(() => asPageId(accountingReportPageIds, activeId.value))
+const analyticsId = computed(() => asPageId(analyticsPageIds, activeId.value))
+const companyId = computed(() => asPageId(companyPageIds, activeId.value))
 const isSalesPage = computed(() => activeId.value === 'customers' || Boolean(documentPageId.value || setupPageId.value || reportPageId.value))
 
 function syncViewport() {
@@ -101,6 +109,9 @@ onBeforeUnmount(() => {
           <SalesDocumentsPage v-else-if="documentPageId" :page-id="documentPageId" />
           <SalesSetupPage v-else-if="setupPageId" :page-id="setupPageId" />
           <SalesReportsPage v-else-if="reportPageId" :page-id="reportPageId" />
+          <AccountingReportsPage v-else-if="accountingReportId" :page-id="accountingReportId" @navigate="selectPage" />
+          <AnalyticsPage v-else-if="analyticsId" :key="analyticsId" :page-id="analyticsId" />
+          <CompanyPage v-else-if="companyId" :key="companyId" :page-id="companyId" />
         </div>
       </main>
     </div>
