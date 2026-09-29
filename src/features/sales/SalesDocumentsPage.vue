@@ -67,7 +67,43 @@ const visibleRecords = computed(() => {
   })
 })
 const visibleTotal = computed(() => visibleRecords.value.reduce((sum, item) => sum + item.amount, 0))
-const currency = (value: number) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(value)
+
+type ColumnKey = 'number' | 'date' | 'customer' | 'paymentTerm' | 'paymentMethod' | 'status' | 'amount' | 'totalPaid' | 'remarks'
+interface Column { key: ColumnKey; label: string; numeric?: boolean }
+// Column order follows the legacy screens for each document type.
+const columns = computed<Column[]>(() => {
+  if (isInvoice.value) return [
+    { key: 'number', label: 'Invoice #' }, { key: 'date', label: 'Date' }, { key: 'customer', label: 'Customer' },
+    { key: 'paymentTerm', label: 'Payment Term' }, { key: 'status', label: 'Status' }, { key: 'amount', label: 'Total Amount', numeric: true },
+    { key: 'totalPaid', label: 'Total Paid', numeric: true }, { key: 'remarks', label: 'Remarks' },
+  ]
+  if (isAcknowledgement.value) return [
+    { key: 'number', label: 'AR#' }, { key: 'date', label: 'Date' }, { key: 'customer', label: 'Customer' },
+    { key: 'paymentMethod', label: 'Payment Method' }, { key: 'status', label: 'Status' }, { key: 'amount', label: 'Total Amount', numeric: true },
+  ]
+  return [
+    { key: 'number', label: 'Collection Receipt #' }, { key: 'date', label: 'Date' }, { key: 'customer', label: 'Customer' },
+    { key: 'status', label: 'Status' }, { key: 'paymentMethod', label: 'Payment Method' }, { key: 'amount', label: 'Amount', numeric: true },
+  ]
+})
+// Invoices open by clicking the row, as in the legacy screen; other documents keep an Actions column.
+const rowOpens = computed(() => isInvoice.value)
+const columnCount = computed(() => columns.value.length + (rowOpens.value ? 0 : 1))
+
+function cellText(item: SalesDocument, key: ColumnKey): string {
+  switch (key) {
+    case 'number': return item.number
+    case 'date': return item.date
+    case 'customer': return customerName(item.customerId)
+    case 'paymentTerm': return termName(item.paymentTermId)
+    case 'paymentMethod': return methodName(item.paymentMethodId)
+    case 'status': return item.status
+    case 'amount': return currency(item.amount)
+    case 'totalPaid': return currency(totalPaid(item.id))
+    case 'remarks': return item.remarks || '—'
+  }
+}
+const currency =(value: number) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(value)
 
 function customerName(id: string) { return customers.value.find((item) => item.id === id)?.name ?? 'Unknown customer' }
 function termName(id: string) { return setupRecords.value.find((item) => item.id === id)?.name ?? '—' }
@@ -139,7 +175,6 @@ function onBulkSaved(count: number) {
 <template>
   <SalesBulkInvoices v-if="isInvoice && bulkOpen" @close="bulkOpen = false" @saved="onBulkSaved" />
   <section v-else class="sales-page" :aria-label="title">
-    <p class="sales-preview-note">Frontend preview · Changes reset when this tab reloads. Totals exclude tax until accounting rules are defined.</p>
     <p v-if="notice" class="sales-notice" role="status">{{ notice }}</p>
     <div class="sales-panel">
       <div class="sales-panel__toolbar">
@@ -156,25 +191,36 @@ function onBulkSaved(count: number) {
       <div class="sales-workspace sales-workspace--single">
         <div class="sales-workspace__results">
           <div class="sales-table-wrap">
-            <table class="sales-table">
+            <table class="sales-table sales-document-table">
               <thead><tr>
-                <th>{{ isInvoice ? 'Invoice #' : isAcknowledgement ? 'AR#' : 'Collection Receipt #' }}</th><th>Date</th><th>Customer</th>
-                <th v-if="isInvoice">Payment Term</th><th v-if="isAcknowledgement">Payment Method</th><th>Status</th>
-                <th v-if="!isInvoice && !isAcknowledgement">Payment Method</th><th class="sales-table__number">{{ isInvoice ? 'Total Amount' : isAcknowledgement ? 'Total Amount' : 'Amount' }}</th><th v-if="isInvoice" class="sales-table__number">Total Paid</th><th v-if="isInvoice">Remarks</th><th>Actions</th>
+                <th v-for="column in columns" :key="column.key" scope="col" :class="{ 'sales-table__number': column.numeric }">{{ column.label }}</th>
+                <th v-if="!rowOpens" scope="col">Actions</th>
               </tr></thead>
-              <tbody><tr v-for="item in visibleRecords" :key="item.id">
-                <td><strong>{{ item.number }}</strong></td><td>{{ item.date }}</td><td>{{ customerName(item.customerId) }}</td>
-                <td v-if="isInvoice">{{ termName(item.paymentTermId) }}</td><td v-if="isAcknowledgement">{{ methodName(item.paymentMethodId) }}</td>
-                <td><span class="sales-badge" :class="item.status === 'Paid' || item.status === 'Posted' || item.status === 'Issued' ? 'sales-badge--success' : 'sales-badge--muted'">{{ item.status }}</span></td>
-                <td v-if="!isInvoice && !isAcknowledgement">{{ methodName(item.paymentMethodId) }}</td>
-                <td class="sales-table__number">{{ currency(item.amount) }}</td>
-                <td v-if="isInvoice" class="sales-table__number">{{ currency(totalPaid(item.id)) }}</td><td v-if="isInvoice">{{ item.remarks || '—' }}</td>
-                <td class="sales-table__actions"><button type="button" :aria-label="`Edit ${item.number}`" @click="openForm(item)"><Pencil :size="15" /></button></td>
-              </tr></tbody>
+              <tbody>
+                <tr v-for="item in visibleRecords" :key="item.id" :class="{ 'sales-table__row--open': rowOpens }" @click="rowOpens && openForm(item)">
+                  <td v-for="column in columns" :key="column.key" :class="{ 'sales-table__number': column.numeric }">
+                    <template v-if="column.key === 'number'">
+                      <button v-if="rowOpens" class="sales-table__link" type="button" :aria-label="`Open ${title.slice(0, -1).toLocaleLowerCase()} ${item.number}`" @click.stop="openForm(item)">{{ item.number }}</button>
+                      <strong v-else>{{ item.number }}</strong>
+                    </template>
+                    <span v-else-if="column.key === 'status'" class="sales-badge" :class="item.status === 'Paid' || item.status === 'Posted' || item.status === 'Issued' ? 'sales-badge--success' : 'sales-badge--muted'">{{ item.status }}</span>
+                    <template v-else>{{ cellText(item, column.key) }}</template>
+                  </td>
+                  <td v-if="!rowOpens" class="sales-table__actions"><button type="button" :aria-label="`Edit ${item.number}`" @click="openForm(item)"><Pencil :size="15" /></button></td>
+                </tr>
+                <tr v-if="!visibleRecords.length" class="sales-table__empty-row">
+                  <td :colspan="columnCount"><strong>No rows to show</strong><span>Try another date range or create a {{ isInvoice ? 'sales invoice' : 'receipt' }}.</span></td>
+                </tr>
+              </tbody>
+              <tfoot><tr>
+                <td v-for="(column, index) in columns" :key="column.key" :class="{ 'sales-table__number': column.numeric }">
+                  <template v-if="index === 0">{{ visibleRecords.length }}</template>
+                  <template v-else-if="column.key === 'amount'">{{ currency(visibleTotal) }}</template>
+                </td>
+                <td v-if="!rowOpens" />
+              </tr></tfoot>
             </table>
           </div>
-          <div v-if="!visibleRecords.length" class="sales-empty"><strong>No rows to show</strong><span>Try another date range or create a {{ isInvoice ? 'sales invoice' : 'receipt' }}.</span></div>
-          <div class="sales-panel__footer"><span>{{ visibleRecords.length }} record{{ visibleRecords.length === 1 ? '' : 's' }}</span><strong>{{ currency(visibleTotal) }}</strong></div>
         </div>
       </div>
     </div>

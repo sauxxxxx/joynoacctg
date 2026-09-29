@@ -28,6 +28,15 @@
 .sales-table td strong { color: #27323a; font-weight: 650; }
 .sales-table__number { text-align: right; font-variant-numeric: tabular-nums; }
 .sales-table__actions { text-align: right; }
+.sales-table__row--open { cursor: pointer; }
+.sales-table__row--open:hover td { background: #f7f9fa; }
+.sales-table__link { padding: 0; border: 0; background: none; color: #27323a; font: inherit; font-weight: 650; text-align: left; }
+.sales-table__link:hover { color: #1f5f8b; text-decoration: underline; text-underline-offset: 2px; }
+.sales-table__empty-row td { height: 260px; text-align: center; white-space: normal; }
+.sales-table__empty-row strong, .sales-table__empty-row span { display: block; }
+.sales-table__empty-row strong { color: #3a454d; font-size: 14px; }
+.sales-table__empty-row span { margin-top: 6px; color: #7d8790; font-size: 12px; }
+.sales-document-table tfoot td { padding: 14px 17px; border-top: 1px solid #dce1e4; color: #29353e; font-weight: 700; }
 .sales-table__actions button { min-width: 28px; height: 28px; display: inline-grid; place-items: center; margin-left: 3px; border: 0; border-radius: 5px; background: transparent; color: #65727c; }
 .sales-table__actions button:hover { background: #eff3f5; color: #263139; }
 .sales-badge { display: inline-block; padding: 5px 9px; border-radius: 99px; font-size: 11px; font-weight: 650; }
