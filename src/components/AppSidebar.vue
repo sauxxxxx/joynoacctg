@@ -18,7 +18,8 @@ const emit = defineEmits<{
 }>()
 
 const query = ref('')
-const expandedIds = ref<string[]>(['assets', 'sales', 'purchases'])
+const expandedIds = ref<string[]>(findAncestorIds(props.activeId))
+const activeAncestorIds = computed(() => findAncestorIds(props.activeId))
 const closeButton = ref<HTMLButtonElement | null>(null)
 
 watch(() => props.mobileOpen, (open) => {
@@ -26,7 +27,7 @@ watch(() => props.mobileOpen, (open) => {
 })
 
 watch(() => props.activeId, (id) => {
-  expandedIds.value = [...new Set([...expandedIds.value, ...findAncestorIds(id)])]
+  expandedIds.value = findAncestorIds(id)
 })
 
 function filterItems(items: NavigationItem[], term: string): NavigationItem[] {
@@ -46,6 +47,10 @@ const visibleItems = computed(() => {
 function toggle(id: string) {
   if (props.collapsed) {
     emit('expand')
+    return
+  }
+  if (navigation.some((item) => item.id === id)) {
+    expandedIds.value = expandedIds.value.includes(id) ? [] : [id]
     return
   }
   expandedIds.value = expandedIds.value.includes(id)
@@ -89,6 +94,7 @@ function select(id: string) {
           :item="item"
           :depth="0"
           :active-id="activeId"
+          :active-ancestor-ids="activeAncestorIds"
           :expanded-ids="expandedIds"
           :filtered="Boolean(query.trim())"
           @select="select"
