@@ -24,7 +24,10 @@ const filtersOpen = ref(false)
 const filterControl = ref<HTMLElement | null>(null)
 const filterButton = ref<HTMLButtonElement | null>(null)
 const selectedIds = ref<string[]>([])
-const activeEntry = ref<PurchaseJournalEntry | null>(null)
+const activeEntry = computed<PurchaseJournalEntry | null>(() => {
+  const id = selectedIds.value.at(-1)
+  return entries.value.find((entry) => entry.id === id) ?? null
+})
 
 const entries = computed(() => {
   const query = searchTerm.value.trim().toLocaleLowerCase()
@@ -108,6 +111,11 @@ function toggleSelection(id: string) {
     : [...selectedIds.value, id]
 }
 
+function openEntry(entry: PurchaseJournalEntry) {
+  reviewMode.value = true
+  selectedIds.value = [...selectedIds.value.filter((id) => id !== entry.id), entry.id]
+}
+
 function toggleAll() {
   const visibleIds = entries.value.map((entry) => entry.id)
   const allSelected = visibleIds.every((id) => selectedIds.value.includes(id))
@@ -156,17 +164,17 @@ function toggleAll() {
       </div>
     </div>
 
-    <div class="journal-workarea">
+    <div class="journal-workarea" :class="{ 'journal-workarea--review': reviewMode }">
       <PurchaseJournalTable
         :entries="entries"
         :selected-ids="selectedIds"
         :review-mode="reviewMode"
         @toggle="toggleSelection"
         @toggle-all="toggleAll"
-        @open="activeEntry = $event"
+        @open="openEntry"
         @reset="resetFilters"
       />
+      <PurchaseJournalDetail v-if="reviewMode" :entry="activeEntry" />
     </div>
-    <PurchaseJournalDetail :entry="activeEntry" @close="activeEntry = null" />
   </section>
 </template>

@@ -3,6 +3,11 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppSidebar from './components/AppSidebar.vue'
 import AppTopbar from './components/AppTopbar.vue'
 import PurchaseJournalPage from './features/accounting/journals/PurchaseJournalPage.vue'
+import JournalPreviewPage from './features/accounting/journals/JournalPreviewPage.vue'
+import type { JournalPreviewKind } from './features/accounting/journals/journalPreviewData'
+import AccountSetupPage from './features/accounting/setup/AccountSetupPage.vue'
+import PurchasesPage from './features/purchases/PurchasesPage.vue'
+import type { PurchaseKind } from './features/purchases/purchasePreviewData'
 import AccountingReportsPage from './features/accounting/reports/AccountingReportsPage.vue'
 import { accountingReportPageIds, analyticsPageIds, asPageId } from './features/accounting/reports/reportPages'
 import AnalyticsPage from './features/accounting/analytics/AnalyticsPage.vue'
@@ -20,6 +25,14 @@ const sidebarCollapsed = ref(false)
 const mobileOpen = ref(false)
 const isMobile = ref(false)
 const activePage = computed(() => findPage(activeId.value) ?? findPage('dashboard')!)
+const journalPreviewIds: JournalPreviewKind[] = ['cash-disbursement-journal', 'cash-receipt-journal', 'sales-journal', 'general-journal']
+const journalPreviewId = computed(() => journalPreviewIds.find((id) => id === activeId.value))
+const purchaseIds: PurchaseKind[] = ['purchase-invoices', 'payrolls', 'cash-voucher', 'check-voucher', 'petty-cash-voucher', 'purchase-receipts']
+const purchasePageId = computed(() => purchaseIds.find((id) => id === activeId.value))
+const accountSetupIds = ['chart-of-accounts', 'account-categories'] as const
+const accountSetupPageId = computed(() => accountSetupIds.find((id) => id === activeId.value))
+const isDataPage = computed(() => Boolean(purchasePageId.value || accountSetupPageId.value))
+const isWorkspacePage = computed(() => activeId.value === 'purchase-journal' || Boolean(journalPreviewId.value) || isDataPage.value)
 const documentIds: DocumentKind[] = ['sales-invoices', 'sales-receipts', 'acknowledgement-receipts']
 const setupIds: SetupKind[] = ['sales-payment-terms', 'sales-payment-methods', 'sales-discount-types']
 const reportIds = ['receivable-schedule', 'receivable-aging'] as const
@@ -82,7 +95,7 @@ onBeforeUnmount(() => {
 
 <template>
   <a class="skip-link" href="#main-content">Skip to content</a>
-  <div class="app-shell" :class="{ 'app-shell--collapsed': sidebarCollapsed }">
+  <div class="app-shell" :class="{ 'app-shell--collapsed': sidebarCollapsed, 'app-shell--journal': isWorkspacePage }">
     <AppSidebar
       :active-id="activeId"
       :collapsed="sidebarCollapsed"
@@ -94,8 +107,8 @@ onBeforeUnmount(() => {
     />
     <div class="app-shell__body" :inert="mobileOpen">
       <AppTopbar :collapsed="sidebarCollapsed" :is-mobile="isMobile" @toggle-sidebar="toggleSidebar" @select="selectPage" />
-      <main id="main-content" class="page-content" :class="{ 'page-content--journal': activeId === 'purchase-journal' }" tabindex="-1">
-        <div v-if="!isSalesPage" class="page-content__heading">
+      <main id="main-content" class="page-content" :class="{ 'page-content--journal': isWorkspacePage, 'page-content--data': isDataPage }" tabindex="-1">
+        <div v-if="!isSalesPage && !isDataPage" class="page-content__heading">
           <nav v-if="activePage.path.length > 1" class="breadcrumbs" aria-label="Breadcrumb">
             <template v-for="(part, index) in activePage.path" :key="`${part}-${index}`">
               <span v-if="index > 0" class="breadcrumbs__divider">/</span><span :class="{ 'breadcrumbs__current': index === activePage.path.length - 1 }">{{ part }}</span>
@@ -105,6 +118,9 @@ onBeforeUnmount(() => {
         </div>
         <div class="page-content__canvas">
           <PurchaseJournalPage v-if="activeId === 'purchase-journal'" />
+          <JournalPreviewPage v-else-if="journalPreviewId" :key="journalPreviewId" :kind="journalPreviewId" />
+          <AccountSetupPage v-else-if="accountSetupPageId" :key="accountSetupPageId" :page-id="accountSetupPageId" />
+          <PurchasesPage v-else-if="purchasePageId" :key="purchasePageId" :kind="purchasePageId" />
           <CustomersPage v-else-if="activeId === 'customers'" />
           <SalesDocumentsPage v-else-if="documentPageId" :page-id="documentPageId" />
           <SalesSetupPage v-else-if="setupPageId" :page-id="setupPageId" />
