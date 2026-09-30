@@ -1,0 +1,114 @@
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import { ChevronDown, ChevronRight, LayoutGrid, ListFilter, Plus, Search } from '@lucide/vue'
+import AccountSetupEditor from './AccountSetupEditor.vue'
+import { accounts, categories, categoryName, type Account, type AccountCategory } from './accountSetupData'
+import './accountSetup.css'
+
+const props = defineProps<{ pageId: 'chart-of-accounts' | 'account-categories' }>()
+type Tab = 'accounts' | 'tree' | 'mapping'
+type TreeRow = { key: string; code: string; name: string; depth: number; group: boolean; expandable: boolean }
+const tab = ref<Tab>('accounts')
+const search = ref('')
+const activeOnly = ref(false)
+const compact = ref(false)
+const expanded = ref<string[]>([])
+const editorOpen = ref(false)
+const editing = ref<Account | AccountCategory | null>(null)
+const isCategories = computed(() => props.pageId === 'account-categories')
+const title = computed(() => isCategories.value ? 'Account Categories' : tab.value === 'mapping' ? 'Account Mapping' : 'Chart of Accounts')
+const filterText = computed(() => search.value.trim().toLocaleLowerCase())
+const visibleAccounts = computed(() => accounts.value.filter((item) => (!activeOnly.value || item.active) && (!filterText.value || [item.code, item.name, item.type, categoryName(item.parentCode), item.remarks, item.itr, item.legalBasis].some((field) => field.toLocaleLowerCase().includes(filterText.value)))).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })))
+const referenceCategoryOrder = ['CAP', 'CCE', 'COS', 'CUA', 'CUL', 'CR', 'FE', 'IT', 'IA', 'I', 'LTI']
+const visibleCategories = computed(() => categories.value.filter((item) => (!activeOnly.value || item.active) && (!filterText.value || [item.code, item.name, categoryName(item.parentCode), item.remarks, item.accountType ?? ''].some((field) => field.toLocaleLowerCase().includes(filterText.value)))).sort((a, b) => {
+  const aRank = referenceCategoryOrder.indexOf(a.code)
+  const bRank = referenceCategoryOrder.indexOf(b.code)
+  if (aRank >= 0 || bRank >= 0) return (aRank >= 0 ? aRank : Infinity) - (bRank >= 0 ? bRank : Infinity)
+  return a.code.localeCompare(b.code)
+}))
+const treeRows = computed<TreeRow[]>(() => {
+  const rows: TreeRow[] = []
+  function append(parentCode: string, depth: number) {
+    for (const category of categories.value.filter((item) => item.parentCode === parentCode)) {
+      const hasChildren = categories.value.some((item) => item.parentCode === category.code) || accounts.value.some((item) => item.parentCode === category.code)
+      rows.push({ key: `c-${category.code}`, code: category.code, name: category.name, depth, group: true, expandable: hasChildren })
+      if (!expanded.value.includes(category.code)) continue
+      append(category.code, depth + 1)
+      for (const account of accounts.value.filter((item) => item.parentCode === category.code).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))) {
+        rows.push({ key: `a-${account.code}`, code: account.code, name: account.name, depth: depth + 1, group: false, expandable: false })
+      }
+    }
+  }
+  append('', 0)
+  return rows
+})
+
+function openEditor(record: Account | AccountCategory | null = null) { editing.value = record; editorOpen.value = true }
+function saveAccount(record: Account) {
+  const index = accounts.value.findIndex((item) => item.code === record.code)
+  if (index >= 0) accounts.value.splice(index, 1, record)
+  else accounts.value.push(record)
+}
+function saveCategory(record: AccountCategory) {
+  const index = categories.value.findIndex((item) => item.code === record.code)
+  if (index >= 0) categories.value.splice(index, 1, record)
+  else categories.value.push(record)
+}
+function removeRecord() {
+  const record = editing.value
+  if (!record) return
+  if (isCategories.value && (categories.value.some((item) => item.parentCode === record.code) || accounts.value.some((item) => item.parentCode === record.code))) {
+    window.alert('Move or remove child categories and accounts before deleting this category.')
+    return
+  }
+  if (!window.confirm(`Delete ${record.code} · ${record.name} from this preview?`)) return
+  if (isCategories.value) categories.value = categories.value.filter((item) => item.code !== record.code)
+  else accounts.value = accounts.value.filter((item) => item.code !== record.code)
+  editorOpen.value = false
+}
+function toggleExpanded(code: string) { expanded.value = expanded.value.includes(code) ? expanded.value.filter((item) => item !== code) : [...expanded.value, code] }
+</script>
+
+<template>
+  <section class="setup-page" :aria-label="isCategories ? 'Account Categories' : 'Chart of Accounts'">
+    <nav v-if="!isCategories" class="setup-tabs" aria-label="Chart of Accounts views">
+      <button v-for="item in ([['accounts', 'Accounts'], ['tree', 'Account Tree View'], ['mapping', 'Mapping']] as const)" :key="item[0]" type="button" :class="{ 'setup-tabs__active': tab === item[0] }" :aria-current="tab === item[0] ? 'page' : undefined" @click="tab = item[0]">{{ item[1] }}</button>
+    </nav>
+    <header v-if="isCategories || tab !== 'tree'" class="setup-toolbar">
+      <div><h1>{{ title }}</h1><span class="setup-toolbar__note">Preview records · Changes reset on reload</span></div>
+      <div class="setup-toolbar__actions">
+        <label class="setup-search"><Search :size="15" aria-hidden="true" /><input v-model="search" type="search" :aria-label="`Search ${title}`" placeholder="Type to filter" /></label>
+        <button type="button" class="setup-icon-button" :aria-pressed="activeOnly" :title="activeOnly ? 'Show all records' : 'Show active only'" aria-label="Toggle active filter" @click="activeOnly = !activeOnly"><ListFilter :size="17" /></button>
+        <button type="button" class="setup-icon-button" :aria-label="`Add ${isCategories ? 'category' : 'account'}`" @click="openEditor()"><Plus :size="19" /></button>
+        <button type="button" class="setup-icon-button" :aria-pressed="compact" title="Toggle compact rows" aria-label="Toggle compact rows" @click="compact = !compact"><LayoutGrid :size="18" /></button>
+      </div>
+    </header>
+    <div v-if="!isCategories && tab === 'tree'" class="setup-tree" role="tree" aria-label="Account tree">
+      <div v-for="row in treeRows" :key="row.key" class="setup-tree__row" :class="{ 'setup-tree__row--account': !row.group }" :style="{ paddingLeft: `${20 + row.depth * 28}px` }" role="treeitem" :aria-level="row.depth + 1" :aria-expanded="row.group && row.expandable ? expanded.includes(row.code) : undefined">
+        <button v-if="row.group && row.expandable" type="button" class="setup-tree__expand" :aria-label="`${expanded.includes(row.code) ? 'Collapse' : 'Expand'} ${row.name}`" @click="toggleExpanded(row.code)"><ChevronDown v-if="expanded.includes(row.code)" :size="15" /><ChevronRight v-else :size="15" /></button>
+        <span v-else class="setup-tree__spacer" />
+        <span class="setup-tree__code">{{ row.code }}</span><span>{{ row.name }}</span>
+      </div>
+      <p v-if="!treeRows.length" class="setup-empty">No categories to show.</p>
+    </div>
+    <div v-else class="setup-table-area" :class="{ 'setup-table-area--compact': compact }">
+      <div class="setup-table-area__scroll"><table class="setup-table"><thead><tr>
+        <th scope="col">Code</th><th scope="col">Name</th>
+        <template v-if="isCategories"><th scope="col">Parent</th><th scope="col">Remarks</th></template>
+        <template v-else-if="tab === 'mapping'"><th scope="col">Account Type</th><th scope="col">ITR</th><th scope="col">Legal Basis</th></template>
+        <template v-else><th scope="col">Parent</th><th scope="col">Account Type</th><th scope="col">Remarks</th></template>
+        <th scope="col">Active</th>
+      </tr></thead><tbody>
+        <tr v-for="item in (isCategories ? visibleCategories : visibleAccounts)" :key="item.code">
+          <td><button type="button" class="setup-table__link" :aria-label="`Edit ${item.name}`" @click="openEditor(item)">{{ item.code }}</button></td><td>{{ item.name }}</td>
+          <template v-if="isCategories"><td>{{ categoryName(item.parentCode) }}</td><td>{{ item.remarks }}</td></template>
+          <template v-else-if="tab === 'mapping'"><td>{{ 'type' in item ? item.type : '' }}</td><td>{{ 'itr' in item ? item.itr : '' }}</td><td>{{ 'legalBasis' in item ? item.legalBasis : '' }}</td></template>
+          <template v-else><td>{{ categoryName(item.parentCode) }}</td><td>{{ 'type' in item ? item.type : '' }}</td><td>{{ item.remarks }}</td></template>
+          <td><input type="checkbox" :checked="item.active" disabled :aria-label="`${item.name} ${item.active ? 'active' : 'inactive'}`" /></td>
+        </tr>
+      </tbody></table><p v-if="!(isCategories ? visibleCategories : visibleAccounts).length" class="setup-empty">No matching records.</p></div>
+      <footer class="setup-table-area__footer"><span>{{ (isCategories ? visibleCategories : visibleAccounts).length }} {{ isCategories ? 'categories' : 'accounts' }}</span></footer>
+    </div>
+    <AccountSetupEditor :open="editorOpen" :kind="isCategories ? 'category' : 'account'" :record="editing" @close="editorOpen = false" @save-account="saveAccount" @save-category="saveCategory" @delete="removeRecord" />
+  </section>
+</template>

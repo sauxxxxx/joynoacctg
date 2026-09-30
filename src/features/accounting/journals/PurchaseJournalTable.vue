@@ -63,6 +63,7 @@ const totalAmountCents = computed(() => props.entries.reduce((total, entry) => t
                 :aria-label="`Select ${entry.referenceNumber}`"
                 :checked="selectedIds.includes(entry.id)"
                 :disabled="!reviewMode"
+                @click.stop
                 @change="emit('toggle', entry.id)"
               />
             </td>
