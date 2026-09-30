@@ -27,6 +27,12 @@ const selectedIds = ref<string[]>([])
 const drafts = ref<JournalPreviewEntry[]>([])
 const editorOpen = ref(false)
 const editingEntry = ref<JournalPreviewEntry | null>(null)
+const nextGeneralJournalNumber = computed(() => {
+  const numbers = [...config.value.entries, ...drafts.value]
+    .map((entry) => Number(entry.journalNumber))
+    .filter(Number.isFinite)
+  return String(Math.max(0, ...numbers) + 1)
+})
 
 const rangeSchema = z.object({
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Choose a valid start date.'),
@@ -133,6 +139,7 @@ function saveDraft(entry: JournalPreviewEntry) {
   <section class="journal-page" :aria-label="config.label">
     <div class="journal-page__toolbar">
       <div class="journal-page__toolbar-left">
+        <h1 class="journal-page__title">{{ config.label }}</h1>
         <label class="journal-switch"><input v-model="reviewMode" type="checkbox" /><span class="journal-switch__track" aria-hidden="true" /><span>Review mode</span></label>
         <span class="journal-page__preview">{{ kind === 'general-journal' ? 'Temporary drafts · Nothing is posted' : kind === 'cash-disbursement-journal' ? '2 reference samples · Nothing is saved' : 'Preview only · No records connected' }}</span>
       </div>
@@ -168,6 +175,6 @@ function saveDraft(entry: JournalPreviewEntry) {
         @toggle="toggleSelection" @toggle-all="toggleAll" @open="openEntry" @reset="resetFilters" @add="openEditor()" />
       <JournalPreviewDetail v-if="reviewMode" :entry="activeEntry" :editable="kind === 'general-journal'" @edit="openEditor" />
     </div>
-    <GeneralJournalEditor v-if="kind === 'general-journal'" :open="editorOpen" :entry="editingEntry" @save="saveDraft" @close="editorOpen = false" />
+    <GeneralJournalEditor v-if="kind === 'general-journal'" :open="editorOpen" :entry="editingEntry" :next-journal-number="nextGeneralJournalNumber" @save="saveDraft" @close="editorOpen = false" />
   </section>
 </template>

@@ -25,6 +25,7 @@ html, body, #app { min-width: 320px; min-height: 100%; margin: 0; }
 body { font-size: 14px; }
 button, input { font: inherit; }
 button { cursor: pointer; }
+dialog:modal { margin: auto; }
 button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 ::selection { background: #dce9f7; color: #182b3e; }
 
@@ -124,8 +125,6 @@ kbd { font-family: inherit; white-space: nowrap; font-size: 10px; color: #a1a8ae
 .page-content--journal { padding-top: 18px; }
 .page-content--journal .page-content__heading { padding-bottom: 14px; }
 .page-content--journal .breadcrumbs { margin-bottom: 6px; }
-.page-content--data { padding: 0; }
-
 @media (min-width: 901px) {
   .app-shell--journal { height: 100dvh; min-height: 0; overflow: hidden; }
   .app-shell--journal .app-shell__body { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }

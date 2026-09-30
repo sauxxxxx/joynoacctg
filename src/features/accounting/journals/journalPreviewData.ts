@@ -1,6 +1,7 @@
 import type { PurchaseJournalLine } from './purchaseJournalData'
 
 export type JournalPreviewKind = 'cash-disbursement-journal' | 'cash-receipt-journal' | 'sales-journal' | 'general-journal'
+export type GeneralJournalType = 'Adjusting Entry' | 'Reversing Entry' | 'Beginning Balance' | 'Closing Entry'
 
 export interface JournalPreviewEntry {
   id: string
@@ -13,6 +14,7 @@ export interface JournalPreviewEntry {
   remarks: string
   createdBy: string
   lines: PurchaseJournalLine[]
+  journalType?: GeneralJournalType
 }
 
 export interface JournalPreviewConfig {
