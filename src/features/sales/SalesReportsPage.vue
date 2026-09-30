@@ -3,8 +3,8 @@ import { computed, ref } from 'vue'
 import DateRangeFilter from '../workspace/DateRangeFilter.vue'
 import { customers } from './customers/customerPreviewStore'
 import { reportDate, tableAmount } from './salesFormat'
-import { salesDocuments } from './salesPreviewStore'
-import { postedReceiptsTotal } from './salesRules'
+import { salesDocuments, setupRecords } from './salesPreviewStore'
+import { postedReceiptsTotal, receivableInstallments } from './salesRules'
 import './sales-pages.css'
 
 type ReportId = 'receivable-schedule' | 'receivable-aging'
@@ -24,17 +24,19 @@ const customerFilter = ref('')
 const monthsError = computed(() => !isAging.value && (!Number.isInteger(Number(months.value)) || months.value < 1 || months.value > 36) ? 'Enter 1 to 36 months.' : '')
 const utcDay = (date: string) => Date.parse(`${date}T00:00:00Z`) / 86_400_000
 
+// One entry per unpaid installment. Only receipts dated on or before the report date reduce the balances.
 const balances = computed(() => {
   const reportDate = asOf.value
   if (!reportDate) return []
   return salesDocuments.value
-    .filter((item) => item.kind === 'sales-invoices' && item.status === 'Unpaid' && item.date <= reportDate && item.dueDate)
-    .map((invoice) => ({
-      invoice,
-      // Only receipts dated on or before the report date reduce the balance.
-      balance: Math.round(Math.max(0, invoice.amount - postedReceiptsTotal(salesDocuments.value, invoice.id, reportDate)) * 100) / 100,
-    }))
-    .filter((item) => item.balance > 0)
+    .filter((item) => item.kind === 'sales-invoices' && item.status === 'Unpaid' && item.date <= reportDate)
+    .flatMap((invoice) => {
+      const term = setupRecords.value.find((record) => record.id === invoice.paymentTermId)
+      const collected = postedReceiptsTotal(salesDocuments.value, invoice.id, reportDate)
+      return receivableInstallments(invoice.amount, invoice.date, term, collected, invoice.dueDate)
+        .filter((installment) => installment.balance > 0)
+        .map((installment) => ({ invoice, installment, dueDate: installment.dueDate, balance: installment.balance }))
+    })
 })
 
 const scheduleRows = computed(() => {
@@ -44,12 +46,13 @@ const scheduleRows = computed(() => {
   const horizon = new Date(start.getFullYear(), targetMonth, Math.min(start.getDate(), lastDay))
   const endDate = localDate(horizon)
   return balances.value
-    .filter(({ invoice }) => (!customerFilter.value || invoice.customerId === customerFilter.value) && invoice.dueDate <= endDate)
-    .map(({ invoice, balance }) => ({
-      invoiceId: invoice.id,
-      invoiceNumber: invoice.number,
+    .filter(({ invoice, dueDate }) => (!customerFilter.value || invoice.customerId === customerFilter.value) && dueDate <= endDate)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.invoice.number.localeCompare(b.invoice.number))
+    .map(({ invoice, installment, dueDate, balance }) => ({
+      rowKey: `${invoice.id}:${installment.number}`,
+      invoiceNumber: installment.count > 1 ? `${invoice.number} (${installment.number}/${installment.count})` : invoice.number,
       name: customers.value.find((customer) => customer.id === invoice.customerId)?.name ?? 'Unknown customer',
-      dueDate: invoice.dueDate,
+      dueDate,
       balance,
     }))
 })
@@ -57,13 +60,13 @@ const scheduleRows = computed(() => {
 // One row per customer, as in the legacy AR Aging report. Each invoice balance falls in one bucket by days past due.
 const agingRows = computed<AgingRow[]>(() => {
   const rows = new Map<string, AgingRow>()
-  for (const { invoice, balance } of balances.value) {
+  for (const { invoice, dueDate, balance } of balances.value) {
     const row = rows.get(invoice.customerId) ?? {
       customerId: invoice.customerId,
       name: customers.value.find((customer) => customer.id === invoice.customerId)?.name ?? 'Unknown customer',
       balance: 0, current: 0, oneToThirty: 0, thirtyOneToSixty: 0, sixtyOneToNinety: 0, overNinety: 0,
     }
-    const overdueDays = utcDay(asOf.value) - utcDay(invoice.dueDate)
+    const overdueDays = utcDay(asOf.value) - utcDay(dueDate)
     const bucket: AgingBucket = overdueDays <= 0 ? 'current' : overdueDays <= 30 ? 'oneToThirty' : overdueDays <= 60 ? 'thirtyOneToSixty' : overdueDays <= 90 ? 'sixtyOneToNinety' : 'overNinety'
     row.balance += balance
     row[bucket] += balance
@@ -115,7 +118,7 @@ const totals = computed(() => agingRows.value.reduce((sum, row) => ({
           <table class="sales-table sales-report__table sales-report__table--grid">
             <thead><tr><th scope="col">Customer</th><th scope="col">Invoice #</th><th scope="col">Due date</th><th scope="col" class="sales-table__number">Balance Due</th></tr></thead>
             <tbody>
-              <tr v-for="row in scheduleRows" :key="row.invoiceId"><td>{{ row.name }}</td><td>{{ row.invoiceNumber }}</td><td>{{ reportDate(row.dueDate) }}</td><td class="sales-table__number">{{ tableAmount(row.balance) }}</td></tr>
+              <tr v-for="row in scheduleRows" :key="row.rowKey"><td>{{ row.name }}</td><td>{{ row.invoiceNumber }}</td><td>{{ reportDate(row.dueDate) }}</td><td class="sales-table__number">{{ tableAmount(row.balance) }}</td></tr>
             </tbody>
             <tfoot><tr><th scope="row">Total</th><td /><td /><td class="sales-table__number">{{ tableAmount(scheduleRows.reduce((sum, row) => sum + row.balance, 0)) }}</td></tr></tfoot>
           </table>

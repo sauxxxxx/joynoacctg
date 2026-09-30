@@ -2,7 +2,9 @@
 .sales-preview-note { margin: 0 0 15px; color: #8a6a33; font-size: 12px; }
 .sales-notice { margin: 0 0 14px; padding: 11px 14px; border: 1px solid #c9e4d3; border-radius: 7px; background: #f0faf3; color: #27613e; font-size: 13px; }
 .sales-panel { overflow: hidden; border: 1px solid var(--border); border-radius: 9px; background: #fff; }
-.sales-panel__toolbar { min-height: 77px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 17px 20px; border-bottom: 1px solid var(--border); }
+.sales-panel__toolbar { min-height: 77px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 20px; padding: 17px 20px; border-bottom: 1px solid var(--border); }
+.sales-panel__toolbar > :first-child { flex: 1 1 220px; }
+.sales-panel__toolbar > .sales-panel__actions { flex: 1 1 auto; }
 .sales-panel__toolbar h2 { margin: 0; color: #202428; font-size: 20px; font-weight: 650; letter-spacing: -.02em; }
 .sales-panel__toolbar p { margin: 4px 0 0; color: #78828a; font-size: 12px; }
 .sales-panel__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { Plus, Search } from '@lucide/vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { Download, Plus, Search } from '@lucide/vue'
 import { useLedger } from '../accounting/reports/useLedger'
 import { isAddOnEnabled, recordAudit } from '../company/companyStore'
 import DateRangeFilter from '../workspace/DateRangeFilter.vue'
@@ -8,6 +8,7 @@ import { customers } from './customers/customerPreviewStore'
 import ReceiptForm from './ReceiptForm.vue'
 import SalesBulkInvoices from './SalesBulkInvoices.vue'
 import SalesInvoiceForm from './SalesInvoiceForm.vue'
+import { downloadCsv, toCsv } from './salesCsv'
 import { reportDate, tableAmount } from './salesFormat'
 import { salesDocuments, setupRecords, type DocumentKind, type SalesDocument } from './salesPreviewStore'
 import { invoiceBalance, invoiceStatus, postedReceiptsTotal } from './salesRules'
@@ -164,6 +165,36 @@ function cellText(item: SalesDocument, key: ColumnKey): string {
 function customerName(id: string) { return customers.value.find((item) => item.id === id)?.name ?? 'Unknown customer' }
 function setupName(id: string) { return setupRecords.value.find((item) => item.id === id)?.name ?? '—' }
 
+/** Raw numbers for money columns so the exported file can be summed; everything else as shown on screen. */
+function csvValue(item: SalesDocument, key: ColumnKey): string | number {
+  switch (key) {
+    case 'amount': return item.amount
+    case 'invoiceTotal': return invoiceTotalFor(item)
+    case 'totalPaid': return postedReceiptsTotal(salesDocuments.value, item.id)
+    case 'totalUnpaid': return unpaidAmount(item)
+    case 'remarks': return item.remarks
+    case 'date': return item.date
+    default: return cellText(item, key)
+  }
+}
+function exportCsv() {
+  if (!visibleRecords.value.length) { notice.value = 'Nothing to export. Change the filters first.'; return }
+  const csv = toCsv(columns.value.map((column) => column.label), visibleRecords.value.map((item) => columns.value.map((column) => csvValue(item, column.key))))
+  const name = viewTitle.value.toLocaleLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  downloadCsv(`${name}-${new Date().toISOString().slice(0, 10)}.csv`, csv)
+  notice.value = `Exported ${visibleRecords.value.length} row${visibleRecords.value.length === 1 ? '' : 's'} to CSV.`
+}
+
+// Ctrl+Shift+A opens a new record from the list, as in the legacy screens.
+function onShortcut(event: KeyboardEvent) {
+  if (!(event.ctrlKey || event.metaKey) || !event.shiftKey || event.key.toLocaleLowerCase() !== 'a') return
+  if (editor.value || bulkOpen.value || document.querySelector('dialog[open]')) return
+  event.preventDefault()
+  open(null)
+}
+onMounted(() => window.addEventListener('keydown', onShortcut))
+onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
+
 function toggleRow(id: string) {
   selectedIds.value = selectedIds.value.includes(id) ? selectedIds.value.filter((value) => value !== id) : [...selectedIds.value, id]
 }
@@ -206,7 +237,8 @@ function onBulkSaved(count: number) {
           <select v-if="view === 'search'" v-model="statusFilter" class="sales-status-filter" aria-label="Filter by status"><option value="all">All statuses</option><option v-for="status in statusOptions" :key="status">{{ status }}</option></select>
           <select v-if="!isAcknowledgement" v-model="customerFilter" class="sales-status-filter" aria-label="Filter by customer"><option value="">All customers</option><option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select>
           <DateRangeFilter v-model="dateRange" :default-value="defaultRange" />
-          <button class="sales-button sales-button--primary" type="button" @click="open(null)"><Plus :size="16" aria-hidden="true" /> New {{ singular }}</button>
+          <button class="sales-button sales-button--primary" type="button" title="Ctrl+Shift+A" @click="open(null)"><Plus :size="16" aria-hidden="true" /> New {{ singular }}</button>
+          <button class="sales-button" type="button" :disabled="!visibleRecords.length" @click="exportCsv"><Download :size="16" aria-hidden="true" /> Export CSV</button>
           <button v-if="isInvoice && view !== 'unjournalized' && isAddOnEnabled('bulk-invoice-import')" class="sales-button" type="button" @click="bulkOpen = true">Add multiple</button>
           <button v-if="showSelect" class="sales-button" type="button" disabled title="Journal entries are created in Accounting once the journal service is connected.">Create Journal</button>
         </div>

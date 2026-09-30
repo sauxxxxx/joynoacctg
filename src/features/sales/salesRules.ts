@@ -48,6 +48,40 @@ export function paymentSchedule(term: TermSchedule, invoiceDate: string): Instal
   }))
 }
 
+export interface ReceivableInstallment extends Installment {
+  count: number
+  amount: number
+  paid: number
+  balance: number
+}
+
+/**
+ * Splits an invoice into its payment-term installments and applies collections to the earliest ones first.
+ * Assumptions pending confirmation: the invoice total is divided equally (the last installment takes the centavo
+ * remainder), and a receipt is not tied to a particular installment.
+ * Without a term the whole invoice is one installment due on `fallbackDueDate`.
+ */
+export function receivableInstallments(
+  invoiceTotal: number,
+  invoiceDate: string,
+  term: TermSchedule | undefined,
+  collected: number,
+  fallbackDueDate = '',
+): ReceivableInstallment[] {
+  const schedule = term ? paymentSchedule(term, invoiceDate) : []
+  const dates = schedule.length ? schedule : fallbackDueDate ? [{ number: 1, dueDate: fallbackDueDate }] : []
+  if (!dates.length) return []
+  const totalCentavos = Math.round(Math.max(0, invoiceTotal) * 100)
+  const share = Math.floor(totalCentavos / dates.length)
+  let remainingCollected = Math.round(Math.max(0, collected) * 100)
+  return dates.map((item, index) => {
+    const amount = index === dates.length - 1 ? totalCentavos - share * index : share
+    const paid = Math.min(amount, remainingCollected)
+    remainingCollected -= paid
+    return { ...item, count: dates.length, amount: amount / 100, paid: paid / 100, balance: (amount - paid) / 100 }
+  })
+}
+
 export function frequencyLabel(term: Pick<SetupRecord, 'payments' | 'frequencyEvery' | 'frequencyUnit'>): string {
   return term.payments > 1 && term.frequencyUnit && term.frequencyEvery > 0 ? `Every ${term.frequencyEvery} ${term.frequencyUnit.toLocaleLowerCase()}` : ''
 }
