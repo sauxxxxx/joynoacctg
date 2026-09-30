@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 
 export type SetupKind = 'sales-payment-terms' | 'sales-payment-methods' | 'sales-discount-types'
+export type PeriodUnit = 'Days' | 'Months' | 'Years'
 
 export interface SetupRecord {
   id: string
@@ -8,10 +9,14 @@ export interface SetupRecord {
   name: string
   active: boolean
   account: string
+  /** Payment terms: number of installments (1 = a single payment). */
   payments: number
-  frequency: string
+  /** Payment terms: the first (or only) payment is due this many units after the invoice date. */
   dueOn: number
-  paymentDue: 'Days' | 'Months'
+  paymentDue: PeriodUnit
+  /** Payment terms with several payments: later payments follow every N units. */
+  frequencyEvery: number
+  frequencyUnit: PeriodUnit | ''
   computation: 'Amount' | 'Percentage'
   rate: number
   allowOverride: boolean
@@ -29,9 +34,23 @@ export interface SalesLineItem {
   vatCode: string
   vatType: string
   vatAmount: number
+  /** Creditable VAT (CVAT), entered as shown on the source invoice. */
+  creditableVatAmount: number
+}
+
+/** One row of a receipt's "for the following invoices" table or an acknowledgement receipt's payment details. */
+export interface PaymentRow {
+  id: string
+  /** Set when the row pays an invoice. */
+  invoiceId: string
+  /** Free-text description when the row is not tied to an invoice (acknowledgement receipts only). */
+  others: string
+  amount: number
 }
 
 export interface InvoiceCustomerDetails {
+  /** Company or Individual, copied from the customer. */
+  customerType: string
   company: string
   tin: string
   street: string
@@ -49,7 +68,6 @@ export interface SalesDocument {
   status: 'Draft' | 'Unpaid' | 'Paid' | 'Posted' | 'Issued' | 'Cancelled'
   paymentTermId: string
   paymentMethodId: string
-  invoiceId: string
   dueDate: string
   amount: number
   remarks: string
@@ -57,6 +75,10 @@ export interface SalesDocument {
   discountTypeId: string
   discountRate: number
   lines: SalesLineItem[]
+  /** Receipts and acknowledgement receipts. */
+  payments: PaymentRow[]
+  /** Acknowledgement receipts: whether the payment details refer to invoices. */
+  withInvoice: boolean
 }
 
 // Preview records remain available while navigating, and reset on page reload.

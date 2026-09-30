@@ -46,13 +46,13 @@ function saveAll() {
   if (error.value) return
   const documents: SalesDocument[] = rows.value.map((row) => {
     const customer = customers.value.find((item) => item.id === row.customerId)
-    const line: SalesLineItem = { id: crypto.randomUUID(), description: row.item.trim(), quantity: Number(row.quantity), unitPrice: Number(row.unitPrice), withholdingTaxCode: '', withholdingTaxAmount: 0, vatCode: '', vatType: '', vatAmount: 0 }
+    const line: SalesLineItem = { id: crypto.randomUUID(), description: row.item.trim(), quantity: Number(row.quantity), unitPrice: Number(row.unitPrice), withholdingTaxCode: '', withholdingTaxAmount: 0, vatCode: '', vatType: '', vatAmount: 0, creditableVatAmount: 0 }
     return {
       id: crypto.randomUUID(), kind: 'sales-invoices', number: row.number.trim(), date: row.date, customerId: row.customerId,
-      status: 'Draft', paymentTermId: row.paymentTermId, paymentMethodId: '', invoiceId: '', dueDate: '',
+      status: 'Draft', paymentTermId: row.paymentTermId, paymentMethodId: '', dueDate: '',
       amount: Math.round(line.quantity * line.unitPrice * 100) / 100, remarks: '',
-      customerDetails: { company: customer?.name ?? '', tin: customer?.tin ?? '', street: customer?.address ?? '', locality: '', country: 'Philippines', zipCode: '' },
-      discountTypeId: '', discountRate: 0, lines: [line],
+      customerDetails: { customerType: customer?.customerType ?? 'Company', company: customer?.name ?? '', tin: customer?.tin ?? '', street: customer?.unitBuilding ?? '', locality: customer?.locality ?? '', country: customer?.country || 'Philippines', zipCode: customer?.zipCode ?? '' },
+      discountTypeId: '', discountRate: 0, lines: [line], payments: [], withInvoice: false,
     }
   })
   salesDocuments.value = [...salesDocuments.value, ...documents]

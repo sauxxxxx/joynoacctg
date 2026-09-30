@@ -141,13 +141,13 @@
 .sales-form .ui-control-label { margin-bottom: 6px; color: #48535b; font-size: 12px; font-weight: 650; }
 
 /* Invoice editor (full page, like the legacy invoice screen). */
-.sales-invoice { display: flex; flex-direction: column; gap: 16px; max-width: 1180px; }
-.sales-invoice__header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.sales-invoice__header h2 { margin: 0; color: #202428; font-size: 22px; font-weight: 650; letter-spacing: -.02em; }
-.sales-invoice__header p { margin: 3px 0 0; color: #78828a; font-size: 12px; }
-.sales-invoice__close { width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: #4e5a62; }
-.sales-invoice__close:hover { background: #eef1f3; color: #1f272d; }
-.sales-invoice__form { display: flex; flex-direction: column; gap: 16px; }
+.sales-editor { display: flex; flex-direction: column; gap: 16px; max-width: 1180px; }
+.sales-editor__header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.sales-editor__header h2 { margin: 0; color: #202428; font-size: 22px; font-weight: 650; letter-spacing: -.02em; }
+.sales-editor__header p { margin: 3px 0 0; color: #78828a; font-size: 12px; }
+.sales-editor__close { width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: #4e5a62; }
+.sales-editor__close:hover { background: #eef1f3; color: #1f272d; }
+.sales-editor__form { display: flex; flex-direction: column; gap: 16px; }
 .sales-notice--info { margin: 0; border-color: #cfe0f3; background: #f1f7fd; color: #29557f; }
 .sales-card { border: 1px solid var(--border); border-radius: 9px; background: #fff; }
 .sales-card__title { margin: 0; padding: 17px 24px 0; color: #29353e; font-size: 14px; font-weight: 700; }
@@ -185,13 +185,67 @@
 .sales-invoice__totals dd { margin: 0; color: #27323a; font-weight: 600; }
 .sales-invoice__totals .sales-invoice__grand { margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--border); color: #202428; font-weight: 700; }
 .sales-invoice__grand dd { font-size: 15px; font-weight: 750; }
-.sales-invoice__actions { position: sticky; bottom: 0; z-index: 5; display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 9px; background: rgba(255, 255, 255, .96); box-shadow: 0 -6px 20px rgba(20, 30, 40, .06); }
-.sales-invoice__error { margin: 0 auto 0 0; color: #9b303a; font-size: 13px; font-weight: 600; }
+.sales-editor__actions { position: sticky; bottom: 0; z-index: 5; display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 9px; background: rgba(255, 255, 255, .96); box-shadow: 0 -6px 20px rgba(20, 30, 40, .06); }
+.sales-editor__error { margin: 0 auto 0 0; color: #9b303a; font-size: 13px; font-weight: 600; }
 
 @media (max-width: 650px) {
   .sales-card__title { padding: 17px 18px 0; }
   .sales-invoice__totals { padding: 16px 18px 18px; }
   .sales-invoice__totals dl { width: 100%; margin: 0; }
-  .sales-invoice__actions { flex-wrap: wrap; }
-  .sales-invoice__error { flex-basis: 100%; }
+  .sales-editor__actions { flex-wrap: wrap; }
+  .sales-editor__error { flex-basis: 100%; }
 }
+
+/* Invoice views (Search / Unjournalized / Unpaid). */
+.sales-tabs { display: flex; gap: 4px; margin: 0 0 12px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+.sales-tabs__tab { min-height: 40px; padding: 0 16px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #5c6770; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.sales-tabs__tab:hover { color: var(--ink); }
+.sales-tabs__tab[aria-selected='true'] { border-bottom-color: #202b32; color: #1f272d; font-weight: 700; }
+.sales-table__select { width: 44px; text-align: center !important; }
+.sales-table__select input { width: 16px; height: 16px; accent-color: #202b32; }
+
+.sales-editor__actions .sales-button--ghost-danger { margin-right: auto; }
+.sales-card__row { display: grid; grid-template-columns: 200px minmax(0, 1fr) minmax(0, 1fr); align-items: end; gap: 12px 16px; padding: 4px 24px 0; }
+.sales-card__row > span:first-child { align-self: center; color: #48535b; font-size: 12px; font-weight: 600; }
+.sales-card__note { margin: 4px 24px 0; color: #5d6870; font-size: 13px; }
+.sales-card__check { margin: 14px 24px 22px; }
+.sales-card__narrow { max-width: 460px; }
+.sales-schedule { width: auto; min-width: 320px; margin: 12px 24px 22px; }
+@media (max-width: 760px) { .sales-card__row { grid-template-columns: 1fr; } }
+
+/* Form field messages and extras shared by the Sales editors. */
+.sales-field-error { display: block; margin-top: 5px; color: #b3303b; font-size: 11px; font-weight: 500; line-height: 1.4; }
+.sales-field-hint { display: block; margin-top: 5px; color: #7d8790; font-size: 11px; font-weight: 400; line-height: 1.4; }
+.sales-form input[aria-invalid='true'], .sales-form select[aria-invalid='true'], .sales-lines-grid td input[aria-invalid='true'] { border-color: #b3303b; }
+.sales-card__inline-check { align-self: end; min-height: 38px; }
+.sales-card__title--bar { padding-bottom: 14px; }
+.sales-card__switch { margin-left: 12px; }
+.sales-card__error { margin: 0; padding: 10px 24px 0; }
+.sales-card__errors { padding-left: 42px; }
+.sales-card--flush .sales-card__toolbar + .sales-table-wrap { border-top: 0; }
+.sales-lines-grid__row--error td { background: #fff6f6; }
+.sales-lines-grid td select { width: 100%; min-width: 260px; height: 34px; padding: 4px 8px; border: 1px solid #dce1e4; border-radius: 5px; background: #fff; color: #263139; font: inherit; font-size: 13px; }
+.sales-lines-grid td select:focus { border-color: var(--focus); outline: 0; box-shadow: 0 0 0 2px rgba(73, 133, 197, .14); }
+.sales-payment-grid { min-width: 0; }
+.sales-payment-grid td:nth-child(3) input { max-width: 200px; margin-left: auto; }
+.sales-options { position: relative; margin-left: auto; }
+.sales-options__toggle { min-height: 34px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: #39434a; font-size: 12px; font-weight: 600; }
+.sales-options__toggle:hover, .sales-options__toggle[aria-expanded='true'] { background: #eceff1; }
+.sales-options__menu { position: absolute; z-index: 20; top: calc(100% + 6px); right: 0; display: flex; flex-direction: column; gap: 14px; min-width: 170px; padding: 16px 18px; border: 1px solid #d6dde1; border-radius: 8px; background: #fff; box-shadow: 0 12px 30px rgba(22, 30, 36, .16); }
+.sales-form .ws-check, .sales-card .ws-check { font-size: 12px; }
+
+/* Checkboxes and switches must not inherit the text-input sizing of .sales-form. */
+.sales-form input[type='checkbox'], .sales-card input[type='checkbox']:not(.sales-lines-grid input) { display: inline-block; width: 16px; height: 16px; min-height: 0; margin: 0; padding: 0; accent-color: #202b32; vertical-align: middle; }
+.sales-form .ws-check, .sales-card > .ws-check { display: inline-flex; align-items: center; gap: 8px; min-height: 38px; color: #3f4a52; font-size: 12px; font-weight: 600; }
+.sales-form .ws-switch input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.sales-form .sales-checkbox > .sales-field-hint { margin-left: 24px; }
+
+/* Number + unit rows of the payment term schedule (they sit outside .sales-form). */
+.sales-field-inline { display: block; min-width: 0; }
+.sales-card__row input:not([type='checkbox']) { display: block; width: 100%; min-height: 38px; padding: 7px 10px; border: 1px solid #cbd3d8; border-radius: 5px; background: #fff; color: #263139; font: inherit; font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+.sales-card__row input:hover { border-color: #85929b; }
+.sales-card__row input:focus { border-color: var(--focus); outline: 0; box-shadow: 0 0 0 2px rgba(73, 133, 197, .14); }
+.sales-card__row input[aria-invalid='true'] { border-color: #b3303b; }
+.sales-card__row { padding-bottom: 6px; margin-bottom: 8px; }
+.sales-card__row:last-child { padding-bottom: 22px; }
+.sales-card > .sales-table-wrap { padding: 0 0 8px; }

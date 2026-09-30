@@ -4,6 +4,7 @@ import DateRangeFilter from '../workspace/DateRangeFilter.vue'
 import { customers } from './customers/customerPreviewStore'
 import { reportDate, tableAmount } from './salesFormat'
 import { salesDocuments } from './salesPreviewStore'
+import { postedReceiptsTotal } from './salesRules'
 import './sales-pages.css'
 
 type ReportId = 'receivable-schedule' | 'receivable-aging'
@@ -26,12 +27,12 @@ const utcDay = (date: string) => Date.parse(`${date}T00:00:00Z`) / 86_400_000
 const balances = computed(() => {
   const reportDate = asOf.value
   if (!reportDate) return []
-  const postedReceipts = salesDocuments.value.filter((item) => item.kind === 'sales-receipts' && item.status === 'Posted' && item.date <= reportDate && item.invoiceId)
   return salesDocuments.value
     .filter((item) => item.kind === 'sales-invoices' && item.status === 'Unpaid' && item.date <= reportDate && item.dueDate)
     .map((invoice) => ({
       invoice,
-      balance: Math.max(0, invoice.amount - postedReceipts.filter((receipt) => receipt.invoiceId === invoice.id).reduce((sum, receipt) => sum + receipt.amount, 0)),
+      // Only receipts dated on or before the report date reduce the balance.
+      balance: Math.round(Math.max(0, invoice.amount - postedReceiptsTotal(salesDocuments.value, invoice.id, reportDate)) * 100) / 100,
     }))
     .filter((item) => item.balance > 0)
 })
