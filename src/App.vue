@@ -8,6 +8,19 @@ import type { JournalPreviewKind } from './features/accounting/journals/journalP
 import AccountSetupPage from './features/accounting/setup/AccountSetupPage.vue'
 import PurchasesPage from './features/purchases/PurchasesPage.vue'
 import type { PurchaseKind } from './features/purchases/purchasePreviewData'
+import PurchaseSetupPage from './features/purchases/setup/PurchaseSetupPage.vue'
+import type { PurchaseSetupKind } from './features/purchases/setup/purchaseSetupData'
+import PurchaseReportsPage from './features/purchases/reports/PurchaseReportsPage.vue'
+import type { PurchaseReportKind } from './features/purchases/reports/purchaseReportData'
+import TaxFormsPage from './features/government/tax/TaxFormsPage.vue'
+import { isTaxFormId } from './features/government/tax/taxFormData'
+import YearlyTaxFormsPage from './features/government/tax/YearlyTaxFormsPage.vue'
+import { isYearlyTaxFormId } from './features/government/tax/yearlyTaxData'
+import TaxCertificatesPage from './features/government/tax/TaxCertificatesPage.vue'
+import { isTaxCertificateId } from './features/government/tax/taxCertificateData'
+import BankAccountsPage from './features/banking/BankAccountsPage.vue'
+import BankTransactionsPage from './features/banking/BankTransactionsPage.vue'
+import FixedAssetsPage from './features/assets/FixedAssetsPage.vue'
 import AccountingReportsPage from './features/accounting/reports/AccountingReportsPage.vue'
 import { accountingReportPageIds, analyticsPageIds, asPageId } from './features/accounting/reports/reportPages'
 import AnalyticsPage from './features/accounting/analytics/AnalyticsPage.vue'
@@ -29,9 +42,18 @@ const journalPreviewIds: JournalPreviewKind[] = ['cash-disbursement-journal', 'c
 const journalPreviewId = computed(() => journalPreviewIds.find((id) => id === activeId.value))
 const purchaseIds: PurchaseKind[] = ['purchase-invoices', 'payrolls', 'cash-voucher', 'check-voucher', 'petty-cash-voucher', 'purchase-receipts']
 const purchasePageId = computed(() => purchaseIds.find((id) => id === activeId.value))
+const purchaseSetupIds: PurchaseSetupKind[] = ['vendors', 'revolving-fund-customers', 'purchases-discount-types', 'purchases-payment-terms', 'purchases-payment-methods']
+const purchaseSetupPageId = computed(() => purchaseSetupIds.find((id) => id === activeId.value))
+const purchaseReportIds: PurchaseReportKind[] = ['payable-schedule', 'payable-aging', 'revolving-fund-logs']
+const purchaseReportPageId = computed(() => purchaseReportIds.find((id) => id === activeId.value))
+const taxFormPageId = computed(() => isTaxFormId(activeId.value) ? activeId.value : undefined)
+const yearlyTaxFormPageId = computed(() => isYearlyTaxFormId(activeId.value) ? activeId.value : undefined)
+const taxCertificatePageId = computed(() => isTaxCertificateId(activeId.value) ? activeId.value : undefined)
+const isBankingPage = computed(() => activeId.value === 'bank-accounts' || activeId.value === 'bank-transactions')
+const isFixedAssetsPage = computed(() => activeId.value === 'fixed-assets')
 const accountSetupIds = ['chart-of-accounts', 'account-categories'] as const
 const accountSetupPageId = computed(() => accountSetupIds.find((id) => id === activeId.value))
-const isDataPage = computed(() => Boolean(purchasePageId.value || accountSetupPageId.value))
+const isDataPage = computed(() => Boolean(purchasePageId.value || purchaseSetupPageId.value || purchaseReportPageId.value || accountSetupPageId.value || taxFormPageId.value || yearlyTaxFormPageId.value || taxCertificatePageId.value || isBankingPage.value || isFixedAssetsPage.value))
 const isWorkspacePage = computed(() => activeId.value === 'purchase-journal' || Boolean(journalPreviewId.value) || isDataPage.value)
 const documentIds: DocumentKind[] = ['sales-invoices', 'sales-receipts', 'acknowledgement-receipts']
 const setupIds: SetupKind[] = ['sales-payment-terms', 'sales-payment-methods', 'sales-discount-types']
@@ -107,8 +129,8 @@ onBeforeUnmount(() => {
     />
     <div class="app-shell__body" :inert="mobileOpen">
       <AppTopbar :collapsed="sidebarCollapsed" :is-mobile="isMobile" @toggle-sidebar="toggleSidebar" @select="selectPage" />
-      <main id="main-content" class="page-content" :class="{ 'page-content--journal': isWorkspacePage, 'page-content--data': isDataPage }" tabindex="-1">
-        <div v-if="!isSalesPage && !isDataPage" class="page-content__heading">
+      <main id="main-content" class="page-content" :class="{ 'page-content--journal': isWorkspacePage }" tabindex="-1">
+        <div v-if="!isSalesPage && !isWorkspacePage" class="page-content__heading">
           <nav v-if="activePage.path.length > 1" class="breadcrumbs" aria-label="Breadcrumb">
             <template v-for="(part, index) in activePage.path" :key="`${part}-${index}`">
               <span v-if="index > 0" class="breadcrumbs__divider">/</span><span :class="{ 'breadcrumbs__current': index === activePage.path.length - 1 }">{{ part }}</span>
@@ -121,6 +143,14 @@ onBeforeUnmount(() => {
           <JournalPreviewPage v-else-if="journalPreviewId" :key="journalPreviewId" :kind="journalPreviewId" />
           <AccountSetupPage v-else-if="accountSetupPageId" :key="accountSetupPageId" :page-id="accountSetupPageId" />
           <PurchasesPage v-else-if="purchasePageId" :key="purchasePageId" :kind="purchasePageId" />
+          <PurchaseSetupPage v-else-if="purchaseSetupPageId" :key="purchaseSetupPageId" :page-id="purchaseSetupPageId" />
+          <PurchaseReportsPage v-else-if="purchaseReportPageId" :key="purchaseReportPageId" :page-id="purchaseReportPageId" />
+          <TaxFormsPage v-else-if="taxFormPageId" :key="taxFormPageId" :form-id="taxFormPageId" />
+          <YearlyTaxFormsPage v-else-if="yearlyTaxFormPageId" :key="yearlyTaxFormPageId" :form-id="yearlyTaxFormPageId" />
+          <TaxCertificatesPage v-else-if="taxCertificatePageId" :key="taxCertificatePageId" :form-id="taxCertificatePageId" />
+          <BankAccountsPage v-else-if="activeId === 'bank-accounts'" />
+          <BankTransactionsPage v-else-if="activeId === 'bank-transactions'" />
+          <FixedAssetsPage v-else-if="isFixedAssetsPage" />
           <CustomersPage v-else-if="activeId === 'customers'" />
           <SalesDocumentsPage v-else-if="documentPageId" :page-id="documentPageId" />
           <SalesSetupPage v-else-if="setupPageId" :page-id="setupPageId" />
