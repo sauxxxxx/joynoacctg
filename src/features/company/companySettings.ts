@@ -1,84 +1,110 @@
 import type { Ref } from 'vue'
-import { z, type ZodType } from 'zod'
-import { companyProfile, recordingSettings, reportingSettings } from './companyStore'
+import { companyProfile, reportingSettings } from './companyStore'
 import { toOptions, type FieldDef } from './recordConfig'
 
-export interface SettingsConfig {
-  description: string
-  note?: string
-  store: Ref<Record<string, unknown>>
+export interface SettingsSection {
+  title?: string
+  /** Fields per row on wide screens. */
+  columns?: 2 | 3
   fields: FieldDef[]
-  schema: ZodType
+}
+
+export interface SettingsConfig {
+  store: Ref<Record<string, unknown>>
+  sections: SettingsSection[]
+  /** Error message for an invalid draft, or ''. */
+  validate: (draft: Record<string, unknown>) => string
   /** Name used in the audit trail and the saved message. */
   subject: string
 }
 
-const optionalEmail = z.union([z.literal(''), z.email('Enter a valid email address.')])
 const monthOptions = Array.from({ length: 12 }, (_, index) => ({
   value: String(index + 1),
   label: new Intl.DateTimeFormat('en-PH', { month: 'long' }).format(new Date(2024, index, 1)),
 }))
+const text = (value: unknown) => (typeof value === 'string' ? value : '').trim()
+const isEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 
 const profile: SettingsConfig = {
-  description: 'Legal and contact details. The company name, TIN, and address appear on printed reports.',
   store: companyProfile as unknown as Ref<Record<string, unknown>>,
   subject: 'Company profile',
-  fields: [
-    { section: 'Business identity', key: 'registeredName', label: 'Registered name', type: 'text', required: true, maxlength: 200 },
-    { key: 'tradeName', label: 'Trade name', type: 'text', maxlength: 200, hint: 'Shown on reports when set.' },
-    { key: 'organizationType', label: 'Organization type', type: 'select', options: () => toOptions(['Sole proprietorship', 'Partnership', 'Corporation', 'One Person Corporation', 'Cooperative', 'Other']) },
-    { key: 'lineOfBusiness', label: 'Line of business', type: 'text', maxlength: 160 },
-    { section: 'Tax registration', key: 'tin', label: 'TIN', type: 'text', maxlength: 20, placeholder: '000-000-000' },
-    { key: 'branchCode', label: 'Branch code', type: 'text', maxlength: 5, placeholder: '00000' },
-    { key: 'rdoCode', label: 'RDO code', type: 'text', maxlength: 5 },
-    { key: 'vatRegistration', label: 'VAT registration', type: 'select', options: () => toOptions(['VAT-registered', 'Non-VAT']) },
-    { section: 'Address', key: 'street', label: 'Unit, building, street, barangay', type: 'text', full: true, maxlength: 200 },
-    { key: 'city', label: 'City / municipality', type: 'text', maxlength: 120 },
-    { key: 'province', label: 'Province', type: 'text', maxlength: 120 },
-    { key: 'zipCode', label: 'ZIP code', type: 'text', maxlength: 10 },
-    { section: 'Contact', key: 'email', label: 'Email', type: 'email', maxlength: 254 },
-    { key: 'phone', label: 'Phone', type: 'text', maxlength: 40 },
-    { key: 'website', label: 'Website', type: 'text', maxlength: 200 },
+  sections: [
+    {
+      title: 'General Information',
+      fields: [
+        { key: 'tin', label: 'TIN', type: 'text', maxlength: 20, placeholder: '000-000-000-00000' },
+        { key: 'birRegistrationDate', label: 'BIR Registration Date', type: 'date' },
+        { key: 'companyName', label: 'Company Name', type: 'text', required: true, full: true, maxlength: 200 },
+        { key: 'formation', label: 'Formation', type: 'select', options: () => toOptions(['Sole Proprietorship', 'Partnership', 'Corporation', 'One Person Corporation', 'Cooperative']) },
+        { key: 'natureOfBusiness', label: 'Nature Of Business', type: 'select', options: () => toOptions(['Service', 'Merchandising', 'Manufacturing', 'Mixed']) },
+        { key: 'rdo', label: 'RDO', type: 'text', maxlength: 80, placeholder: 'e.g. 083 - Talisay-Minglanilla, Cebu' },
+        { key: 'lineOfBusiness', label: 'Line of Business', type: 'text', maxlength: 160 },
+      ],
+    },
+    {
+      title: 'Contact Details',
+      fields: [
+        { key: 'telephone', label: 'Tel #', type: 'text', maxlength: 40 },
+        { key: 'email', label: 'E-mail', type: 'email', maxlength: 254 },
+      ],
+    },
+    {
+      title: 'Address',
+      columns: 3,
+      fields: [
+        { key: 'unitBuilding', label: 'Unit #, Bldg', type: 'text', maxlength: 120 },
+        { key: 'street', label: 'Lot/Block/Phase/House No. & Street', type: 'text', maxlength: 160 },
+        { key: 'barangay', label: 'Subdivision/Village/Zone, Barangay, Town/District', type: 'text', maxlength: 160 },
+        { key: 'city', label: 'Municipality/City', type: 'text', maxlength: 120 },
+        { key: 'province', label: 'Province', type: 'text', maxlength: 120 },
+        { key: 'zipCode', label: 'Zip Code', type: 'text', maxlength: 10 },
+        { key: 'country', label: 'Country', type: 'text', maxlength: 80 },
+      ],
+    },
   ],
-  schema: z.object({
-    registeredName: z.string().trim().min(1, 'Registered name is required.'),
-    tin: z.string().regex(/^[\d-]*$/, 'TIN can contain only digits and dashes.'),
-    branchCode: z.string().regex(/^\d*$/, 'Branch code can contain only digits.'),
-    zipCode: z.string().regex(/^\d*$/, 'ZIP code can contain only digits.'),
-    email: optionalEmail,
-  }),
-}
-
-const recording: SettingsConfig = {
-  description: 'How transactions are recorded. The fiscal year start is used by report periods and analytics.',
-  store: recordingSettings as unknown as Ref<Record<string, unknown>>,
-  subject: 'Recording settings',
-  fields: [
-    { section: 'Accounting period', key: 'fiscalYearStartMonth', label: 'Fiscal year starts in', type: 'select', required: true, options: () => monthOptions },
-    { key: 'lockDate', label: 'Lock entries up to', type: 'date', hint: 'Stored for the journal module, which will block changes on or before this date.' },
-    { section: 'Books', key: 'accountingBasis', label: 'Accounting basis', type: 'select', options: () => toOptions(['Accrual', 'Cash']) },
-    { key: 'booksFormat', label: 'Books of accounts', type: 'select', options: () => toOptions(['Manual', 'Loose-leaf', 'Computerized']) },
-    { key: 'baseCurrency', label: 'Base currency', type: 'select', options: () => [{ value: 'PHP', label: 'PHP · Philippine peso' }], hint: 'Other currencies are not supported yet.' },
-  ],
-  schema: z.object({ fiscalYearStartMonth: z.string().regex(/^(?:[1-9]|1[0-2])$/, 'Choose the fiscal year start month.') }),
+  validate: (draft) => {
+    if (!text(draft.companyName)) return 'Company Name is required.'
+    if (!/^[\d-]*$/.test(text(draft.tin))) return 'TIN can contain only digits and dashes.'
+    if (text(draft.email) && !isEmail(text(draft.email))) return 'Enter a valid e-mail address.'
+    if (!/^\d*$/.test(text(draft.zipCode))) return 'Zip Code can contain only digits.'
+    return ''
+  },
 }
 
 const reporting: SettingsConfig = {
-  description: 'Defaults for accounting reports. Signatories and the footer note print at the bottom of each report.',
   store: reportingSettings as unknown as Ref<Record<string, unknown>>,
   subject: 'Reporting settings',
-  fields: [
-    { section: 'Signatories', key: 'preparedBy', label: 'Prepared by', type: 'text', maxlength: 120 },
-    { key: 'reviewedBy', label: 'Reviewed by', type: 'text', maxlength: 120 },
-    { key: 'approvedBy', label: 'Approved by', type: 'text', maxlength: 120 },
-    { section: 'Report defaults', key: 'includeZeroBalances', label: 'Include zero-balance accounts in the Trial Balance by default', type: 'checkbox' },
-    { key: 'footerNote', label: 'Footer note', type: 'textarea', maxlength: 500 },
+  sections: [
+    {
+      fields: [
+        { key: 'parentCompany', label: 'Parent Company', type: 'text', maxlength: 200 },
+        { key: 'monthEnd', label: 'Month End', type: 'select', required: true, options: () => monthOptions, hint: 'Last month of the fiscal year. Report periods follow it.' },
+      ],
+    },
+    {
+      title: 'Primary Signatory',
+      fields: [
+        { key: 'primaryName', label: 'Name', type: 'text', maxlength: 120 },
+        { key: 'primaryPosition', label: 'Position', type: 'text', maxlength: 120 },
+      ],
+    },
+    {
+      title: 'Secondary Signatory',
+      fields: [
+        { key: 'secondaryName', label: 'Name', type: 'text', maxlength: 120 },
+        { key: 'secondaryPosition', label: 'Position', type: 'text', maxlength: 120 },
+      ],
+    },
   ],
-  schema: z.object({}),
+  validate: (draft) => {
+    if (!/^(?:[1-9]|1[0-2])$/.test(text(draft.monthEnd))) return 'Choose the Month End.'
+    if (text(draft.primaryPosition) && !text(draft.primaryName)) return 'Enter the primary signatory name.'
+    if (text(draft.secondaryPosition) && !text(draft.secondaryName)) return 'Enter the secondary signatory name.'
+    return ''
+  },
 }
 
 export const settingsPages: Record<string, SettingsConfig> = {
   'company-profile': profile,
-  'company-recording': recording,
   'company-reporting': reporting,
 }

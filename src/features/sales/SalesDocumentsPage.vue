@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Plus, Search, X } from '@lucide/vue'
-import { isAddOnEnabled, recordAudit } from '../company/companyStore'
-import { customers } from './customers/customerPreviewStore'
 import AppDatePicker from '../../components/ui/AppDatePicker.vue'
+import { isAddOnEnabled, recordAudit } from '../company/companyStore'
 import DateRangeFilter from '../workspace/DateRangeFilter.vue'
+import { customers } from './customers/customerPreviewStore'
 import SalesBulkInvoices from './SalesBulkInvoices.vue'
+import SalesInvoiceForm from './SalesInvoiceForm.vue'
 import { reportDate, tableAmount } from './salesFormat'
-import { salesDocuments, setupRecords, type DocumentKind, type SalesDocument, type SalesLineItem } from './salesPreviewStore'
+import { salesDocuments, setupRecords, type DocumentKind, type SalesDocument } from './salesPreviewStore'
+import { invoiceStatus, postedReceiptsTotal } from './salesRules'
 import './sales-pages.css'
 
 const props = defineProps<{ pageId: DocumentKind }>()
@@ -27,45 +29,38 @@ const search = ref('')
 const statusFilter = ref('all')
 const dialog = ref<HTMLDialogElement | null>(null)
 const bulkOpen = ref(false)
+// Invoices open in a full-page editor, as in the legacy screen; receipts use a dialog.
+const invoiceEditor = ref<{ invoice: SalesDocument | null } | null>(null)
 const error = ref('')
 const notice = ref('')
 const title = computed(() => titles[props.pageId])
+const singular = computed(() => ({ 'sales-invoices': 'invoice', 'sales-receipts': 'receipt', 'acknowledgement-receipts': 'acknowledgement receipt' })[props.pageId])
 const isInvoice = computed(() => props.pageId === 'sales-invoices')
 const isAcknowledgement = computed(() => props.pageId === 'acknowledgement-receipts')
-const terms = computed(() => setupRecords.value.filter((item) => item.kind === 'sales-payment-terms' && (item.active || item.id === draft.value.paymentTermId)))
 const methods = computed(() => setupRecords.value.filter((item) => item.kind === 'sales-payment-methods' && (item.active || item.id === draft.value.paymentMethodId)))
-const discounts = computed(() => setupRecords.value.filter((item) => item.kind === 'sales-discount-types' && (item.active || item.id === draft.value.discountTypeId)))
-const invoiceOptions = computed(() => salesDocuments.value.filter((item) => item.kind === 'sales-invoices' && item.customerId === draft.value.customerId))
+const invoiceOptions = computed(() => salesDocuments.value.filter((item) => item.kind === 'sales-invoices' && item.customerId === draft.value.customerId && item.status !== 'Draft'))
+const statusOptions = computed(() => isInvoice.value ? ['Draft', 'Unpaid', 'Paid', 'Cancelled'] : ['Draft', isAcknowledgement.value ? 'Issued' : 'Posted', 'Cancelled'])
 
-function emptyLine(): SalesLineItem {
-  return { id: crypto.randomUUID(), description: '', quantity: 1, unitPrice: 0, withholdingTaxCode: '', withholdingTaxAmount: 0, vatCode: '', vatType: '', vatAmount: 0 }
-}
-function emptyDocument(kind: DocumentKind): SalesDocument {
+function emptyReceipt(kind: DocumentKind): SalesDocument {
   return {
     id: '', kind, number: '', date: dateInput(new Date()), customerId: '', status: 'Draft',
     paymentTermId: '', paymentMethodId: '', invoiceId: '', dueDate: '', amount: 0,
     remarks: '', customerDetails: { company: '', tin: '', street: '', locality: '', country: 'Philippines', zipCode: '' },
-    discountTypeId: '', discountRate: 0, lines: kind === 'sales-invoices' ? [emptyLine()] : [],
+    discountTypeId: '', discountRate: 0, lines: [],
   }
 }
 
-const draft = ref<SalesDocument>(emptyDocument(props.pageId))
-const subtotal = computed(() => draft.value.lines.reduce((sum, line) => sum + (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0), 0))
-const selectedDiscount = computed(() => discounts.value.find((item) => item.id === draft.value.discountTypeId))
-const discountAmount = computed(() => {
-  const rate = Number(draft.value.discountRate) || 0
-  return Math.min(subtotal.value, Math.max(0, selectedDiscount.value?.computation === 'Percentage' ? subtotal.value * rate / 100 : rate))
-})
-const invoiceTotal = computed(() => Math.max(0, subtotal.value - (selectedDiscount.value ? discountAmount.value : 0)))
+const draft = ref<SalesDocument>(emptyReceipt(props.pageId))
 const records = computed(() => salesDocuments.value.filter((item) => item.kind === props.pageId))
+const statusOf = (item: SalesDocument) => item.kind === 'sales-invoices' ? invoiceStatus(item, salesDocuments.value) : item.status
 const visibleRecords = computed(() => {
   const term = search.value.trim().toLocaleLowerCase()
   return records.value.filter((item) => {
     if (dateRange.value.from && item.date < dateRange.value.from) return false
     if (dateRange.value.to && item.date > dateRange.value.to) return false
     if (customerFilter.value && !isAcknowledgement.value && item.customerId !== customerFilter.value) return false
-    if (statusFilter.value !== 'all' && item.status !== statusFilter.value) return false
-    return !term || `${item.number} ${customerName(item.customerId)} ${item.status}`.toLocaleLowerCase().includes(term)
+    if (statusFilter.value !== 'all' && statusOf(item) !== statusFilter.value) return false
+    return !term || `${item.number} ${customerName(item.customerId)} ${statusOf(item)} ${item.remarks}`.toLocaleLowerCase().includes(term)
   })
 })
 
@@ -108,40 +103,35 @@ function cellText(item: SalesDocument, key: ColumnKey): string {
     case 'number': return item.number
     case 'date': return reportDate(item.date)
     case 'customer': return customerName(item.customerId)
-    case 'paymentTerm': return termName(item.paymentTermId)
-    case 'paymentMethod': return methodName(item.paymentMethodId)
-    case 'status': return item.status
+    case 'paymentTerm': return setupName(item.paymentTermId)
+    case 'paymentMethod': return setupName(item.paymentMethodId)
+    case 'status': return statusOf(item)
     case 'amount': return tableAmount(item.amount)
     case 'invoiceTotal': { const total = invoiceTotalFor(item); return total === null ? '—' : tableAmount(total) }
-    case 'totalPaid': return tableAmount(totalPaid(item.id))
+    case 'totalPaid': return tableAmount(postedReceiptsTotal(salesDocuments.value, item.id))
     case 'remarks': return item.remarks || '—'
   }
 }
-const currency =(value: number) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(value)
 
 function customerName(id: string) { return customers.value.find((item) => item.id === id)?.name ?? 'Unknown customer' }
-function termName(id: string) { return setupRecords.value.find((item) => item.id === id)?.name ?? '—' }
-function methodName(id: string) { return setupRecords.value.find((item) => item.id === id)?.name ?? '—' }
-function totalPaid(invoiceId: string) {
-  return salesDocuments.value.filter((item) => item.kind === 'sales-receipts' && item.invoiceId === invoiceId && item.status === 'Posted')
-    .reduce((sum, item) => sum + item.amount, 0)
-}
-function fillCustomerDetails() {
-  const customer = customers.value.find((item) => item.id === draft.value.customerId)
-  if (!customer) return
-  draft.value.customerDetails = {
-    ...draft.value.customerDetails,
-    company: customer.name,
-    tin: customer.tin,
-    street: customer.address,
-  }
-}
+function setupName(id: string) { return setupRecords.value.find((item) => item.id === id)?.name ?? '—' }
+
 function openForm(item?: SalesDocument) {
-  draft.value = item ? { ...item, customerDetails: { ...item.customerDetails }, lines: item.lines.map((line) => ({ ...line })) } : emptyDocument(props.pageId)
+  if (isInvoice.value) {
+    invoiceEditor.value = { invoice: item ?? null }
+    notice.value = ''
+    return
+  }
+  draft.value = item ? { ...item, customerDetails: { ...item.customerDetails }, lines: [] } : emptyReceipt(props.pageId)
   error.value = ''
   dialog.value?.showModal()
 }
-function chooseDiscount() { draft.value.discountRate = selectedDiscount.value?.rate ?? 0 }
+
+function onInvoiceSaved(message: string) {
+  invoiceEditor.value = null
+  notice.value = message
+}
+
 function save() {
   const number = draft.value.number.trim()
   if (!number || !customers.value.some((customer) => customer.id === draft.value.customerId) || !draft.value.date) {
@@ -152,33 +142,20 @@ function save() {
     error.value = 'This document number is already in use.'
     return
   }
-  if (isInvoice.value && (draft.value.lines.length === 0 || draft.value.lines.some((line) => !line.description.trim() || !Number.isFinite(line.quantity) || line.quantity <= 0 || !Number.isFinite(line.unitPrice) || line.unitPrice < 0 || !Number.isFinite(line.withholdingTaxAmount) || line.withholdingTaxAmount < 0 || !Number.isFinite(line.vatAmount) || line.vatAmount < 0))) {
-    error.value = 'Each invoice line needs a description, positive quantity, and nonnegative price.'
-    return
-  }
-  if (isInvoice.value && selectedDiscount.value?.computation === 'Percentage' && draft.value.discountRate > 100) {
-    error.value = 'Percentage discount cannot exceed 100.'
-    return
-  }
-  if (!isInvoice.value && (!Number.isFinite(draft.value.amount) || draft.value.amount <= 0)) {
+  if (!Number.isFinite(draft.value.amount) || draft.value.amount <= 0) {
     error.value = 'Amount must be greater than zero.'
     return
   }
-  const item: SalesDocument = {
-    ...draft.value,
-    id: draft.value.id || crypto.randomUUID(),
-    number,
-    remarks: draft.value.remarks.trim(),
-    amount: isInvoice.value ? Math.round(invoiceTotal.value * 100) / 100 : Number(draft.value.amount),
-    lines: draft.value.lines.map((line) => ({ ...line, description: line.description.trim() })),
-  }
+  const item: SalesDocument = { ...draft.value, id: draft.value.id || crypto.randomUUID(), number, remarks: draft.value.remarks.trim(), amount: Number(draft.value.amount) }
   salesDocuments.value = draft.value.id
     ? salesDocuments.value.map((record) => record.id === item.id ? item : record)
     : [...salesDocuments.value, item]
-  notice.value = `${title.value.slice(0, -1)} ${draft.value.id ? 'updated' : 'added'}.`
-  recordAudit('Sales', draft.value.id ? 'Updated' : 'Created', `${title.value.slice(0, -1)}: ${item.number}`, `${item.status} · ${currency(item.amount)}`)
+  const label = singular.value.charAt(0).toLocaleUpperCase() + singular.value.slice(1)
+  notice.value = `${label} ${draft.value.id ? 'updated' : 'added'}.`
+  recordAudit('Sales', draft.value.id ? 'Updated' : 'Created', `${label}: ${item.number}`, `${item.status} · ${tableAmount(item.amount)}`)
   dialog.value?.close()
 }
+
 function onBulkSaved(count: number) {
   bulkOpen.value = false
   notice.value = `${count} draft invoice${count === 1 ? '' : 's'} added.`
@@ -187,7 +164,8 @@ function onBulkSaved(count: number) {
 </script>
 
 <template>
-  <SalesBulkInvoices v-if="isInvoice && bulkOpen" @close="bulkOpen = false" @saved="onBulkSaved" />
+  <SalesInvoiceForm v-if="isInvoice && invoiceEditor" :invoice="invoiceEditor.invoice" @close="invoiceEditor = null" @saved="onInvoiceSaved" />
+  <SalesBulkInvoices v-else-if="isInvoice && bulkOpen" @close="bulkOpen = false" @saved="onBulkSaved" />
   <section v-else class="sales-page" :aria-label="title">
     <p v-if="notice" class="sales-notice" role="status">{{ notice }}</p>
     <div class="sales-panel">
@@ -195,99 +173,51 @@ function onBulkSaved(count: number) {
         <div><h2>{{ title }}</h2><p>Review and prepare {{ title.toLocaleLowerCase() }}.</p></div>
         <div class="sales-panel__actions">
           <label class="sales-search"><Search :size="16" aria-hidden="true" /><input v-model="search" type="search" placeholder="Type to filter" :aria-label="`Search ${title}`" /></label>
-          <select v-model="statusFilter" class="sales-status-filter" aria-label="Filter by status"><option value="all">All statuses</option><option>Draft</option><option v-if="isInvoice">Unpaid</option><option v-if="isInvoice">Paid</option><option v-if="!isInvoice">{{ isAcknowledgement ? 'Issued' : 'Posted' }}</option><option>Cancelled</option></select>
+          <select v-model="statusFilter" class="sales-status-filter" aria-label="Filter by status"><option value="all">All statuses</option><option v-for="status in statusOptions" :key="status">{{ status }}</option></select>
           <select v-if="!isAcknowledgement" v-model="customerFilter" class="sales-status-filter" aria-label="Filter by customer"><option value="">All customers</option><option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select>
           <DateRangeFilter v-model="dateRange" :default-value="defaultRange" />
-          <button class="sales-button sales-button--primary" type="button" @click="openForm()"><Plus :size="16" aria-hidden="true" /> New {{ isInvoice ? 'invoice' : isAcknowledgement ? 'acknowledgement receipt' : 'receipt' }}</button>
+          <button class="sales-button sales-button--primary" type="button" @click="openForm()"><Plus :size="16" aria-hidden="true" /> New {{ singular }}</button>
           <button v-if="isInvoice && isAddOnEnabled('bulk-invoice-import')" class="sales-button" type="button" @click="bulkOpen = true">Add multiple</button>
         </div>
       </div>
-      <div class="sales-workspace sales-workspace--single">
-        <div class="sales-workspace__results">
-          <div class="sales-table-wrap">
-            <table class="sales-table sales-document-table">
-              <thead><tr>
-                <th v-for="column in columns" :key="column.key" scope="col" :class="{ 'sales-table__number': column.numeric }">{{ column.label }}</th>
-              </tr></thead>
-              <tbody>
-                <tr v-for="item in visibleRecords" :key="item.id" class="sales-table__row--open" @click="openForm(item)">
-                  <td v-for="column in columns" :key="column.key" :class="{ 'sales-table__number': column.numeric }">
-                    <template v-if="column.key === 'number'">
-                      <button class="sales-table__link" type="button" :aria-label="`Open ${title.slice(0, -1).toLocaleLowerCase()} ${item.number}`" @click.stop="openForm(item)">{{ item.number }}</button>
-                    </template>
-                    <span v-else-if="column.key === 'status'" class="sales-badge" :class="item.status === 'Paid' || item.status === 'Posted' || item.status === 'Issued' ? 'sales-badge--success' : 'sales-badge--muted'">{{ item.status }}</span>
-                    <template v-else>{{ cellText(item, column.key) }}</template>
-                  </td>
-                </tr>
-                <tr v-if="!visibleRecords.length" class="sales-table__empty-row">
-                  <td :colspan="columns.length"><strong>No rows to show</strong><span>Try another date range or create a {{ isInvoice ? 'sales invoice' : 'receipt' }}.</span></td>
-                </tr>
-              </tbody>
-              <tfoot><tr>
-                <td v-for="(column, index) in columns" :key="column.key" :class="{ 'sales-table__number': column.numeric }">
-                  <template v-if="index === 0">{{ visibleRecords.length }}</template>
-                  <template v-else-if="totalledColumns.includes(column.key)">{{ tableAmount(columnTotal(column.key)) }}</template>
-                </td>
-              </tr></tfoot>
-            </table>
-          </div>
-        </div>
+      <div class="sales-table-wrap">
+        <table class="sales-table sales-document-table">
+          <thead><tr>
+            <th v-for="column in columns" :key="column.key" scope="col" :class="{ 'sales-table__number': column.numeric }">{{ column.label }}</th>
+          </tr></thead>
+          <tbody>
+            <tr v-for="item in visibleRecords" :key="item.id" class="sales-table__row--open" @click="openForm(item)">
+              <td v-for="column in columns" :key="column.key" :class="{ 'sales-table__number': column.numeric }">
+                <button v-if="column.key === 'number'" class="sales-table__link" type="button" :aria-label="`Open ${singular} ${item.number}`" @click.stop="openForm(item)">{{ item.number }}</button>
+                <span v-else-if="column.key === 'status'" class="sales-badge" :class="['Paid', 'Posted', 'Issued'].includes(statusOf(item)) ? 'sales-badge--success' : 'sales-badge--muted'">{{ statusOf(item) }}</span>
+                <template v-else>{{ cellText(item, column.key) }}</template>
+              </td>
+            </tr>
+            <tr v-if="!visibleRecords.length" class="sales-table__empty-row">
+              <td :colspan="columns.length"><strong>No rows to show</strong><span>Try another date range or create a {{ singular }}.</span></td>
+            </tr>
+          </tbody>
+          <tfoot><tr>
+            <td v-for="(column, index) in columns" :key="column.key" :class="{ 'sales-table__number': column.numeric }">
+              <template v-if="index === 0">{{ visibleRecords.length }}</template>
+              <template v-else-if="totalledColumns.includes(column.key)">{{ tableAmount(columnTotal(column.key)) }}</template>
+            </td>
+          </tr></tfoot>
+        </table>
       </div>
     </div>
 
-    <dialog ref="dialog" class="sales-dialog sales-dialog--wide" :aria-label="`${draft.id ? 'Edit' : 'New'} ${title.slice(0, -1)}`">
-      <form @submit.prevent="save">
-        <div class="sales-dialog__header"><h2>{{ draft.id ? 'Edit' : 'New' }} {{ isInvoice ? 'invoice' : isAcknowledgement ? 'acknowledgement receipt' : 'receipt' }}</h2><button type="button" aria-label="Close form" @click="dialog?.close()"><X :size="18" /></button></div>
+    <dialog ref="dialog" class="sales-dialog sales-dialog--wide" :aria-label="`${draft.id ? 'Edit' : 'New'} ${singular}`">
+      <form novalidate @submit.prevent="save">
+        <div class="sales-dialog__header"><h2>{{ draft.id ? 'Edit' : 'New' }} {{ singular }}</h2><button type="button" aria-label="Close form" @click="dialog?.close()"><X :size="18" /></button></div>
         <div class="sales-form">
-          <label>{{ isInvoice ? 'Invoice #' : isAcknowledgement ? 'AR#' : 'Collection Receipt #' }} <span>*</span><input v-model="draft.number" required maxlength="40" /></label>
+          <label>{{ isAcknowledgement ? 'AR#' : 'Collection Receipt #' }} <span>*</span><input v-model="draft.number" maxlength="40" /></label>
           <AppDatePicker id="sales-document-date" v-model="draft.date" label="Date" required />
-          <label>Customer <span>*</span><select v-model="draft.customerId" required @change="fillCustomerDetails"><option value="" disabled>Select customer</option><option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select></label>
-          <label>Status<select v-model="draft.status"><option>Draft</option><option v-if="isInvoice">Unpaid</option><option v-if="isInvoice">Paid</option><option v-if="!isInvoice">{{ isAcknowledgement ? 'Issued' : 'Posted' }}</option><option>Cancelled</option></select></label>
-          <template v-if="isInvoice">
-            <label>Payment Term<select v-model="draft.paymentTermId"><option value="">None</option><option v-for="term in terms" :key="term.id" :value="term.id">{{ term.name }}</option></select></label>
-            <AppDatePicker id="sales-document-due-date" v-model="draft.dueDate" label="Due Date" :min="draft.date" />
-            <label>Payment Method<select v-model="draft.paymentMethodId"><option value="">None</option><option v-for="method in methods" :key="method.id" :value="method.id">{{ method.name }}</option></select></label>
-          </template>
-          <template v-else>
-            <label>Payment Method<select v-model="draft.paymentMethodId"><option value="">None</option><option v-for="method in methods" :key="method.id" :value="method.id">{{ method.name }}</option></select></label>
-            <label v-if="!isAcknowledgement">Invoice reference<select v-model="draft.invoiceId"><option value="">None</option><option v-for="invoice in invoiceOptions" :key="invoice.id" :value="invoice.id">{{ invoice.number }}</option></select></label>
-            <label>Amount <span>*</span><input v-model.number="draft.amount" type="number" min="0.01" step="0.01" required /></label>
-          </template>
-          <label v-if="isInvoice" class="sales-form__full">Remarks<textarea v-model="draft.remarks" rows="2" maxlength="500" /></label>
-        </div>
-        <div v-if="isInvoice" class="sales-lines">
-          <div class="sales-lines__heading"><h3>Line items</h3><button class="sales-button" type="button" @click="draft.lines.push(emptyLine())"><Plus :size="15" /> Add line</button></div>
-          <div v-for="(line, index) in draft.lines" :key="line.id" class="sales-lines__row">
-            <label>Item<input v-model="line.description" required maxlength="160" /></label>
-            <label>Quantity<input v-model.number="line.quantity" type="number" min="0.01" step="0.01" required /></label>
-            <label>Unit price<input v-model.number="line.unitPrice" type="number" min="0" step="0.01" required /></label>
-            <button type="button" :aria-label="`Remove line ${index + 1}`" :disabled="draft.lines.length === 1" @click="draft.lines.splice(index, 1)"><X :size="17" /></button>
-            <div class="sales-lines__taxes">
-              <label>WTAX Code<input v-model="line.withholdingTaxCode" maxlength="40" /></label>
-              <label>WTAX<input v-model.number="line.withholdingTaxAmount" type="number" min="0" step="0.01" /></label>
-              <label>VAT Code<input v-model="line.vatCode" maxlength="40" /></label>
-              <label>VAT Type<input v-model="line.vatType" maxlength="40" /></label>
-              <label>VAT<input v-model.number="line.vatAmount" type="number" min="0" step="0.01" /></label>
-            </div>
-          </div>
-          <div class="sales-lines__totals">
-            <span>Subtotal <strong>{{ currency(subtotal) }}</strong></span>
-            <label>Discount type<select v-model="draft.discountTypeId" @change="chooseDiscount"><option value="">None</option><option v-for="discount in discounts" :key="discount.id" :value="discount.id">{{ discount.name }}</option></select></label>
-            <label v-if="selectedDiscount">{{ selectedDiscount.computation === 'Percentage' ? 'Rate (%)' : 'Amount' }}<input v-model.number="draft.discountRate" type="number" min="0" step="0.01" :disabled="!selectedDiscount.allowOverride" /></label>
-            <span v-if="selectedDiscount">Discount <strong>−{{ currency(discountAmount) }}</strong></span>
-            <span class="sales-lines__total">Total before tax <strong>{{ currency(invoiceTotal) }}</strong></span>
-          </div>
-        </div>
-        <div v-if="isInvoice" class="sales-customer-details">
-          <h3>Customer Details</h3>
-          <div class="sales-form">
-            <label>Company<input v-model="draft.customerDetails.company" maxlength="120" /></label>
-            <label>Tax Identification Number<input v-model="draft.customerDetails.tin" maxlength="30" /></label>
-            <label class="sales-form__full">Unit#, Bldg., St., Barangay<input v-model="draft.customerDetails.street" maxlength="180" /></label>
-            <label class="sales-form__full">District/Town, City, Province<input v-model="draft.customerDetails.locality" maxlength="180" /></label>
-            <label>Country<input v-model="draft.customerDetails.country" maxlength="80" /></label>
-            <label>Zip code<input v-model="draft.customerDetails.zipCode" maxlength="12" /></label>
-          </div>
+          <label>Customer <span>*</span><select v-model="draft.customerId"><option value="" disabled>Select customer</option><option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select></label>
+          <label>Status<select v-model="draft.status"><option>Draft</option><option>{{ isAcknowledgement ? 'Issued' : 'Posted' }}</option><option>Cancelled</option></select></label>
+          <label>Payment Method<select v-model="draft.paymentMethodId"><option value="">None</option><option v-for="method in methods" :key="method.id" :value="method.id">{{ method.name }}</option></select></label>
+          <label v-if="!isAcknowledgement">Invoice reference<select v-model="draft.invoiceId"><option value="">None</option><option v-for="invoice in invoiceOptions" :key="invoice.id" :value="invoice.id">{{ invoice.number }}</option></select></label>
+          <label>Amount <span>*</span><input v-model.number="draft.amount" type="number" min="0.01" step="0.01" /></label>
         </div>
         <p v-if="error" class="sales-form__error" role="alert">{{ error }}</p>
         <div class="sales-dialog__footer"><button class="sales-button" type="button" @click="dialog?.close()">Cancel</button><button class="sales-button sales-button--primary" type="submit">Save</button></div>

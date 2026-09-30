@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { reportingSettings } from '../../company/companyStore'
 import DateRangeFilter from '../../workspace/DateRangeFilter.vue'
 import { accountTypeLabels } from './ledgerContract'
 import { trialBalance } from './ledgerMath'
@@ -14,7 +13,7 @@ import { useLedger } from './useLedger'
 
 const ledger = useLedger()
 const { range, defaultRange, asOf } = useAsOfDate()
-const includeZero = ref(reportingSettings.value.includeZeroBalances)
+const includeZero = ref(false)
 
 const report = computed(() => trialBalance(ledger.accounts.value, ledger.lines.value, asOf.value, includeZero.value))
 const period = computed(() => `As of ${formatLongDate(asOf.value)}`)

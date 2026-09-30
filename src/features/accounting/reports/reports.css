@@ -1,5 +1,6 @@
 .acct-doc { overflow: hidden; }
 .acct-doc__header { padding: 26px 24px 20px; border-bottom: 1px solid var(--border); text-align: center; }
+.acct-doc__logo { display: block; max-width: 180px; max-height: 64px; margin: 0 auto 10px; object-fit: contain; }
 .acct-doc__company { margin: 0; color: #202428; font-size: 15px; font-weight: 700; }
 .acct-doc__company--missing { color: #9a8a6c; font-size: 12px; font-weight: 600; }
 .acct-doc__meta { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px; margin: 5px 0 0; color: #6f7a82; font-size: 11px; }
@@ -12,7 +13,6 @@
 .acct-doc__line { width: 100%; max-width: 220px; height: 1px; margin-bottom: 6px; background: #aeb7bd; }
 .acct-doc__signatories strong { color: #29343c; font-size: 12px; }
 .acct-doc__signatories small { color: #7d8790; font-size: 11px; }
-.acct-doc__note { margin: 0 0 8px; color: #59646c; font-size: 11px; line-height: 1.5; white-space: pre-line; }
 .acct-doc__generated { margin: 0; color: #939ca3; font-size: 11px; }
 
 /* Financial statements: section → category → account rows with subtotals. */

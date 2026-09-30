@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { AlertTriangle, Download, Info, Printer, RotateCw } from '@lucide/vue'
-import { companyDisplayName, companyProfile, isAddOnEnabled, reportingSettings } from '../../company/companyStore'
+import { companyAddress, companyDisplayName, companyProfile, isAddOnEnabled, reportingSettings } from '../../company/companyStore'
 import type { EntryIssue } from './ledgerMath'
 import '../../workspace/workspace.css'
 import './reports.css'
@@ -18,14 +18,10 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ export: []; retry: [] }>()
 
-const address = computed(() => {
-  const profile = companyProfile.value
-  return [profile.street, profile.city, profile.province, profile.zipCode].map((part) => part.trim()).filter(Boolean).join(', ')
-})
+// Signatories come from Company › Reporting; the position prints under each name.
 const signatories = computed(() => [
-  { role: 'Prepared by', name: reportingSettings.value.preparedBy.trim() },
-  { role: 'Reviewed by', name: reportingSettings.value.reviewedBy.trim() },
-  { role: 'Approved by', name: reportingSettings.value.approvedBy.trim() },
+  { key: 'primary', name: reportingSettings.value.primaryName.trim(), position: reportingSettings.value.primaryPosition.trim() },
+  { key: 'secondary', name: reportingSettings.value.secondaryName.trim(), position: reportingSettings.value.secondaryPosition.trim() },
 ].filter((item) => item.name))
 const exportEnabled = computed(() => isAddOnEnabled('report-csv-export'))
 const stamp = () => new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date())
@@ -72,10 +68,11 @@ function print() {
         <slot name="summary" />
         <article class="ws-panel acct-doc">
           <header class="acct-doc__header">
-            <p v-if="companyDisplayName" class="acct-doc__company">{{ companyDisplayName }}</p>
-            <p v-else class="acct-doc__company acct-doc__company--missing acct-report__screen-only">Company name not set · add it in Company › Profile</p>
-            <p v-if="companyProfile.tin || address" class="acct-doc__meta">
-              <span v-if="companyProfile.tin">TIN {{ companyProfile.tin }}</span><span v-if="address">{{ address }}</span>
+            <img v-if="companyProfile.logo" class="acct-doc__logo" :src="companyProfile.logo" alt="" />
+            <p v-if="companyDisplayName && !(companyProfile.logo && companyProfile.logoContainsName)" class="acct-doc__company">{{ companyDisplayName }}</p>
+            <p v-else-if="!companyDisplayName" class="acct-doc__company acct-doc__company--missing acct-report__screen-only">Company name not set · add it in Company › Profile</p>
+            <p v-if="companyProfile.tin || companyAddress" class="acct-doc__meta">
+              <span v-if="companyProfile.tin">TIN {{ companyProfile.tin }}</span><span v-if="companyAddress">{{ companyAddress }}</span>
             </p>
             <h2 class="acct-doc__title">{{ title }}</h2>
             <p class="acct-doc__period">{{ period }}</p>
@@ -83,9 +80,8 @@ function print() {
           <div class="acct-doc__body"><slot /></div>
           <footer class="acct-doc__footer">
             <div v-if="signatories.length" class="acct-doc__signatories">
-              <div v-for="item in signatories" :key="item.role"><span class="acct-doc__line" /><strong>{{ item.name }}</strong><small>{{ item.role }}</small></div>
+              <div v-for="item in signatories" :key="item.key"><span class="acct-doc__line" /><strong>{{ item.name }}</strong><small v-if="item.position">{{ item.position }}</small></div>
             </div>
-            <p v-if="reportingSettings.footerNote.trim()" class="acct-doc__note">{{ reportingSettings.footerNote }}</p>
             <p class="acct-doc__generated">Generated {{ generatedAt }}</p>
           </footer>
         </article>

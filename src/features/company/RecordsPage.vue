@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
-import { Info, Pencil, Plus, Search, Trash2, X } from '@lucide/vue'
+import { Check, Info, Plus, Search, Trash2, X } from '@lucide/vue'
 import AppSelect from '../../components/ui/AppSelect.vue'
 import { recordAudit } from './companyStore'
 import RecordField from './RecordField.vue'
@@ -34,6 +34,7 @@ const visible = computed(() => {
 const visibleFields = computed(() => props.config.fields.filter((field) => !field.when || field.when(draft.value)))
 const preview = computed(() => props.config.preview?.(draft.value) ?? null)
 
+// Records open by clicking their row, as in the legacy lists; deleting happens from the form.
 function openForm(record?: AnyRecord) {
   // Records are plain JSON data; this also unwraps Vue's reactive proxies.
   draft.value = JSON.parse(JSON.stringify(record ?? { id: '', ...props.config.empty() }))
@@ -73,12 +74,15 @@ function save() {
   formDialog.value?.close()
 }
 
-function askDelete(record: AnyRecord) {
+function deleteFromForm() {
+  const record = records.value.find((item) => item.id === draft.value.id)
+  if (!record) return
   const blocker = props.config.deleteBlocker?.(record)
   if (blocker) {
-    notice.value = blocker
+    formError.value = blocker
     return
   }
+  formDialog.value?.close()
   pendingDelete.value = record
   deleteDialog.value?.showModal()
 }
@@ -95,55 +99,53 @@ function confirmDelete() {
 function fieldId(field: FieldDef) {
   return `record-${props.config.singular.replace(/\W+/g, '-')}-${field.key}`
 }
-
 </script>
 
 <template>
   <section class="ws-page co-page" :aria-label="`${title} records`">
     <div class="ws-stack">
-      <p class="co-intro">{{ config.description }}</p>
       <p v-if="config.note" class="ws-note"><Info :size="14" aria-hidden="true" />{{ config.note }}</p>
       <p v-if="notice" class="ws-notice" role="status">{{ notice }}</p>
 
       <div class="ws-panel ws-panel--clip">
-        <div class="ws-toolbar">
-          <label class="ws-search"><Search :size="16" aria-hidden="true" /><input v-model="search" type="search" :placeholder="`Search ${config.plural}`" :aria-label="`Search ${config.plural}`" /></label>
-          <div v-if="hasStatus" class="ws-toolbar__field"><AppSelect v-model="status" aria-label="Filter by status" :options="statusOptions" /></div>
-          <span class="ws-toolbar__spacer" />
-          <button class="ws-button ws-button--primary" type="button" @click="openForm()"><Plus :size="16" aria-hidden="true" /> Add {{ config.singular }}</button>
+        <div class="ws-panel__header">
+          <div><h2>{{ config.heading ?? title }}</h2><p>{{ config.description }}</p></div>
+          <div class="ws-panel__actions">
+            <label class="ws-search"><Search :size="16" aria-hidden="true" /><input v-model="search" type="search" placeholder="Type to filter" :aria-label="`Search ${config.plural}`" /></label>
+            <div v-if="hasStatus" class="ws-toolbar__field"><AppSelect v-model="status" aria-label="Filter by status" :options="statusOptions" /></div>
+            <button class="ws-button ws-button--primary" type="button" @click="openForm()"><Plus :size="16" aria-hidden="true" /> Add {{ config.singular }}</button>
+          </div>
         </div>
 
-        <div v-if="visible.length" class="ws-table-wrap">
-          <table class="ws-table">
-            <thead><tr><th v-for="column in config.columns" :key="column.label" scope="col" :class="{ 'ws-num': column.numeric }">{{ column.label }}</th><th scope="col" class="ws-actions">Actions</th></tr></thead>
+        <div class="ws-table-wrap">
+          <table class="ws-table co-list">
+            <thead><tr><th v-for="column in config.columns" :key="column.label" scope="col" :class="{ 'ws-num': column.numeric, 'co-list__center': column.check }">{{ column.label }}</th></tr></thead>
             <tbody>
-              <tr v-for="record in visible" :key="record.id">
-                <td v-for="column in config.columns" :key="column.label" :class="{ 'ws-num': column.numeric }">
-                  <span v-if="column.badge" class="ws-badge" :class="`ws-badge--${column.badge(record).tone}`">{{ column.badge(record).text }}</span>
+              <tr v-for="record in visible" :key="record.id" class="co-list__row" @click="openForm(record)">
+                <td v-for="(column, index) in config.columns" :key="column.label" :class="{ 'ws-num': column.numeric, 'co-list__center': column.check }">
+                  <button v-if="index === 0" class="co-list__link" type="button" :aria-label="`Open ${config.label(record)}`" @click.stop="openForm(record)">{{ column.value(record) }}</button>
+                  <span v-else-if="column.check" class="co-check" :class="{ 'co-check--on': column.check(record) }" role="img" :aria-label="`${column.label} ${column.check(record) ? 'yes' : 'no'}`"><Check v-if="column.check(record)" :size="13" :stroke-width="3" aria-hidden="true" /></span>
+                  <span v-else-if="column.badge" class="ws-badge" :class="`ws-badge--${column.badge(record).tone}`">{{ column.badge(record).text }}</span>
                   <strong v-else-if="column.strong">{{ column.value(record) }}</strong>
                   <template v-else>{{ column.value(record) }}</template>
                   <small v-if="column.sub && column.sub(record)">{{ column.sub(record) }}</small>
                 </td>
-                <td class="ws-actions">
-                  <button class="ws-icon-button" type="button" :aria-label="`Edit ${config.label(record)}`" @click="openForm(record)"><Pencil :size="15" aria-hidden="true" /></button>
-                  <button class="ws-icon-button ws-icon-button--danger" type="button" :aria-label="`Delete ${config.label(record)}`" @click="askDelete(record)"><Trash2 :size="15" aria-hidden="true" /></button>
+              </tr>
+              <tr v-if="!visible.length" class="co-list__empty">
+                <td :colspan="config.columns.length">
+                  <strong>{{ records.length ? `No ${config.plural} match` : 'No rows to show' }}</strong>
+                  <span>{{ records.length ? 'Try another search or status.' : `Add your first ${config.singular} to get started.` }}</span>
                 </td>
               </tr>
             </tbody>
+            <tfoot><tr><td :colspan="config.columns.length"><span>{{ visible.length }}</span><span v-if="config.footer" class="co-list__footnote">{{ config.footer(records) }}</span></td></tr></tfoot>
           </table>
         </div>
-        <div v-else class="ws-empty">
-          <strong>{{ records.length ? `No ${config.plural} match` : `No ${config.plural} yet` }}</strong>
-          <span>{{ records.length ? 'Try another search or status.' : `Add your first ${config.singular} to get started.` }}</span>
-          <button v-if="records.length" class="ws-button" type="button" @click="search = ''; status = 'all'">Clear filters</button>
-          <button v-else class="ws-button" type="button" @click="openForm()"><Plus :size="15" aria-hidden="true" /> Add {{ config.singular }}</button>
-        </div>
-        <div class="ws-panel__footer"><span>{{ visible.length }} of {{ records.length }} {{ records.length === 1 ? config.singular : config.plural }}</span><span v-if="config.footer">{{ config.footer(records) }}</span></div>
       </div>
     </div>
 
     <dialog ref="formDialog" class="ws-dialog" :class="{ 'ws-dialog--wide': preview }" :aria-label="`${draft.id ? 'Edit' : 'Add'} ${config.singular}`">
-      <form @submit.prevent="save">
+      <form novalidate @submit.prevent="save">
         <div class="ws-dialog__header"><h2>{{ draft.id ? 'Edit' : 'Add' }} {{ config.singular }}</h2><button class="ws-icon-button" type="button" aria-label="Close" @click="formDialog?.close()"><X :size="18" aria-hidden="true" /></button></div>
         <div ref="formBody" class="ws-dialog__body">
           <div class="co-form-layout" :class="{ 'co-form-layout--preview': preview }">
@@ -158,7 +160,11 @@ function fieldId(field: FieldDef) {
           </div>
           <p v-if="formError" class="ws-form-error" role="alert">{{ formError }}</p>
         </div>
-        <div class="ws-dialog__footer"><button class="ws-button" type="button" @click="formDialog?.close()">Cancel</button><button class="ws-button ws-button--primary" type="submit">{{ draft.id ? 'Save changes' : `Add ${config.singular}` }}</button></div>
+        <div class="ws-dialog__footer">
+          <button v-if="draft.id" class="ws-button co-button--ghost-danger" type="button" @click="deleteFromForm"><Trash2 :size="15" aria-hidden="true" /> Delete</button>
+          <button class="ws-button" type="button" @click="formDialog?.close()">Cancel</button>
+          <button class="ws-button ws-button--primary" type="submit">{{ draft.id ? 'Save changes' : `Add ${config.singular}` }}</button>
+        </div>
       </form>
     </dialog>
 
