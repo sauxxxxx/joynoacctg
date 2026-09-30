@@ -23,6 +23,7 @@ const labelId = `${uid}-label`
 const root = ref<HTMLElement | null>(null)
 const trigger = ref<HTMLButtonElement | null>(null)
 const panel = ref<HTMLElement | null>(null)
+const panelHost = ref<HTMLElement | string>('body')
 const open = ref(false)
 const view = ref(new Date())
 const focusedIso = ref('')
@@ -80,6 +81,7 @@ function focusDay() {
 
 function show() {
   if (props.disabled) return
+  panelHost.value = root.value?.closest('dialog') ?? 'body'
   const initial = selectedDate.value ?? new Date()
   const iso = toIsoDate(initial)
   focusedIso.value = allowed(iso) ? iso : (props.min ?? props.max ?? todayIso)
@@ -180,7 +182,7 @@ onBeforeUnmount(() => {
       <span :class="{ 'ui-date-picker__placeholder': !selectedDate }">{{ displayValue }}</span>
       <CalendarDays :size="16" aria-hidden="true" />
     </button>
-    <Teleport to="body">
+    <Teleport :to="panelHost">
       <div v-if="open" :id="panelId" ref="panel" class="ui-date-picker__panel" role="dialog"
         :aria-label="`Choose date for ${label}`" :style="panelPosition" @keydown="onEscape">
         <div class="ui-date-picker__header">
