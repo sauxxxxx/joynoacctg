@@ -34,6 +34,8 @@ export interface ColumnDef {
   numeric?: boolean
   strong?: boolean
   badge?: (record: AnyRecord) => { text: string; tone: BadgeTone }
+  /** Shows a read-only checkbox, like the legacy Active? columns. */
+  check?: (record: AnyRecord) => boolean
 }
 
 export interface RecordsConfig {
@@ -42,6 +44,8 @@ export interface RecordsConfig {
   /** Plural noun, lower case: "owners". */
   plural: string
   description: string
+  /** Panel title when it differs from the singular noun, e.g. "Company User Roles". */
+  heading?: string
   /** Assumptions or limits the reader should know. Shown above the list. */
   note?: string
   store: Ref<AnyRecord[]>

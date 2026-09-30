@@ -1,159 +1,69 @@
 import { z } from 'zod'
-import { formatShortDate, todayIso } from '../accounting/reports/reportPeriods'
+import { todayIso } from '../accounting/reports/reportPeriods'
 import {
-  companyDisplayName, documentSeries, goods, messageTemplates, otherItems, owners, registrations, reportTemplates, roles,
-  services, taxRules, users, type CompanyItem, type DocumentSeries, type ItemKind, type MessageTemplate,
+  companyDisplayName, documentSeries, goods, messageTemplates, otherItems, ownerFullName, owners, reportTemplates, roles,
+  services, users, type CompanyItem, type DocumentSeries, type ItemKind, type MessageTemplate, type Owner, type UserAccount,
 } from './companyStore'
-import { activeBadge, defineRecords, sameText, text, toOptions, type AnyRecord, type FieldDef, type RecordsConfig } from './recordConfig'
+import { defineRecords, sameText, text, toOptions, type AnyRecord, type FieldDef, type RecordsConfig } from './recordConfig'
 
 const required = (label: string) => z.string().trim().min(1, `${label} is required.`)
 const optionalEmail = z.union([z.literal(''), z.email('Enter a valid email address.')])
 const amountField = (label: string) => z.number(`${label} must be a number.`).finite().min(0, `${label} cannot be negative.`)
 const peso = (value: unknown) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(Number(value) || 0)
-const dayDiff = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000)
 const duplicate = (others: AnyRecord[], draft: AnyRecord, key: string) => others.some((record) => sameText(record[key], draft[key]))
 
 // ------------------------------------------------------------------ Owners
 
-const owners$ = defineRecords({
+const owners$ = defineRecords<Owner>({
   singular: 'owner',
   plural: 'owners',
-  description: 'Owners, partners, or stockholders and their share in the business.',
+  heading: 'Owners',
+  description: 'Owners, partners, or stockholders of the company.',
   store: owners,
   auditModule: 'Company',
-  empty: () => ({ name: '', tin: '', position: '', ownershipPercent: 0, email: '', address: '', active: true }),
+  empty: () => ({ firstName: '', middleName: '', lastName: '', suffix: '', tin: '', email: '', address: '', active: true }),
   fields: [
-    { key: 'name', label: 'Full name', type: 'text', required: true },
-    { key: 'position', label: 'Position', type: 'text', placeholder: 'e.g. Managing Partner' },
-    { key: 'tin', label: 'TIN', type: 'text', maxlength: 30 },
-    { key: 'ownershipPercent', label: 'Ownership', type: 'percent', required: true },
+    { key: 'firstName', label: 'First Name', type: 'text', required: true, maxlength: 80 },
+    { key: 'middleName', label: 'Middle Name', type: 'text', maxlength: 80 },
+    { key: 'lastName', label: 'Last Name', type: 'text', required: true, maxlength: 80 },
+    { key: 'suffix', label: 'Suffix', type: 'text', maxlength: 10, placeholder: 'e.g. Jr., III' },
+    { key: 'tin', label: 'TIN', type: 'text', maxlength: 20 },
     { key: 'email', label: 'Email', type: 'email' },
     { key: 'address', label: 'Address', type: 'textarea', maxlength: 500 },
     { key: 'active', label: 'Active', type: 'checkbox' },
   ],
   columns: [
-    { label: 'Name', value: (r) => text(r, 'name'), sub: (r) => String(r.position ?? ''), strong: true },
-    { label: 'TIN', value: (r) => text(r, 'tin') },
-    { label: 'Ownership', value: (r) => `${Number(r.ownershipPercent).toFixed(2)}%`, numeric: true },
-    { label: 'Email', value: (r) => text(r, 'email') },
-    { label: 'Status', value: () => '', badge: activeBadge },
+    { label: 'First Name', value: (r) => text(r, 'firstName') },
+    { label: 'Middle Name', value: (r) => String(r.middleName ?? '') },
+    { label: 'Last Name', value: (r) => String(r.lastName ?? '') },
+    { label: 'Suffix', value: (r) => String(r.suffix ?? '') },
+    { label: 'Active', value: () => '', check: (r) => Boolean(r.active) },
   ],
   schema: z.object({
-    name: required('Full name'),
-    ownershipPercent: z.number('Ownership must be a number.').min(0, 'Ownership cannot be negative.').max(100, 'Ownership cannot exceed 100%.'),
+    firstName: required('First name'),
+    lastName: required('Last name'),
+    tin: z.string().regex(/^[\d-]*$/, 'TIN can contain only digits and dashes.'),
     email: optionalEmail,
   }),
-  // Shares above 100% in total are impossible, so this is enforced rather than warned.
-  validate: (draft, others) => {
-    const total = others.filter((record) => record.active).reduce((sum, record) => sum + Number(record.ownershipPercent), 0) + (draft.active ? Number(draft.ownershipPercent) : 0)
-    return total > 100.0001 ? `Active owners would total ${total.toFixed(2)}%. The total cannot exceed 100%.` : ''
-  },
-  label: (r) => String(r.name),
-  searchText: (r) => `${r.name} ${r.tin} ${r.position} ${r.email}`,
-  footer: (records) => `Active ownership recorded: ${records.filter((r) => r.active).reduce((sum, r) => sum + Number(r.ownershipPercent), 0).toFixed(2)}%`,
-})
-
-// ------------------------------------------------------------------ Registration
-
-const registrationTypes = [
-  'BIR Certificate of Registration', 'SEC Registration', 'DTI Registration', 'CDA Registration', "Mayor's / Business Permit",
-  'Barangay Clearance', 'SSS Employer Registration', 'PhilHealth Employer Registration', 'Pag-IBIG Employer Registration', 'Other',
-] as const
-const reminderDays = 30
-
-function registrationStatus(record: AnyRecord) {
-  const expires = String(record.expiresOn ?? '')
-  if (!expires) return { text: 'No expiry', tone: 'muted' as const }
-  const days = dayDiff(todayIso(), expires)
-  if (days < 0) return { text: 'Expired', tone: 'danger' as const }
-  if (days <= reminderDays) return { text: days === 0 ? 'Expires today' : `Expires in ${days} day${days === 1 ? '' : 's'}`, tone: 'warning' as const }
-  return { text: 'Valid', tone: 'success' as const }
-}
-
-const registrations$ = defineRecords({
-  singular: 'registration',
-  plural: 'registrations',
-  description: 'Government registrations, permits, and certificates, with expiry tracking.',
-  note: `Records expiring within ${reminderDays} days are marked for renewal. This is a display reminder only.`,
-  store: registrations,
-  auditModule: 'Company',
-  empty: () => ({ type: '', number: '', agency: '', issuedOn: '', expiresOn: '', notes: '' }),
-  fields: [
-    { key: 'type', label: 'Registration type', type: 'select', required: true, options: () => toOptions(registrationTypes) },
-    { key: 'number', label: 'Registration number', type: 'text', required: true, maxlength: 60 },
-    { key: 'agency', label: 'Issuing office', type: 'text', placeholder: 'e.g. RDO, LGU, or branch' },
-    { key: 'issuedOn', label: 'Issued on', type: 'date' },
-    { key: 'expiresOn', label: 'Expires on', type: 'date', hint: 'Leave blank if it does not expire.' },
-    { key: 'notes', label: 'Notes', type: 'textarea', maxlength: 500 },
-  ],
-  columns: [
-    { label: 'Type', value: (r) => text(r, 'type'), strong: true },
-    { label: 'Number', value: (r) => text(r, 'number') },
-    { label: 'Issuing office', value: (r) => text(r, 'agency') },
-    { label: 'Issued', value: (r) => r.issuedOn ? formatShortDate(String(r.issuedOn)) : '—' },
-    { label: 'Expires', value: (r) => r.expiresOn ? formatShortDate(String(r.expiresOn)) : '—' },
-    { label: 'Status', value: () => '', badge: registrationStatus },
-  ],
-  schema: z.object({ type: required('Registration type'), number: required('Registration number'), issuedOn: z.string(), expiresOn: z.string() })
-    .refine((r) => !r.issuedOn || !r.expiresOn || r.expiresOn >= r.issuedOn, 'The expiry date must be on or after the issue date.'),
-  label: (r) => `${r.type} ${r.number}`,
-  searchText: (r) => `${r.type} ${r.number} ${r.agency} ${r.notes}`,
-})
-
-// ------------------------------------------------------------------ Tax rules
-
-const taxTypes = ['Value-added tax', 'Percentage tax', 'Expanded withholding', 'Final withholding', 'Withholding on compensation', 'Other'] as const
-
-const taxRules$ = defineRecords({
-  singular: 'tax rule',
-  plural: 'tax rules',
-  description: 'Tax codes your team uses on sales and purchase documents.',
-  note: 'Rates are entered by your team. The system does not supply or verify official BIR rates or ATCs, so confirm each one against current regulations.',
-  store: taxRules,
-  auditModule: 'Company',
-  empty: () => ({ code: '', description: '', taxType: '', ratePercent: 0, appliesTo: 'Both', atc: '', active: true }),
-  fields: [
-    { key: 'code', label: 'Tax code', type: 'text', required: true, maxlength: 30 },
-    { key: 'taxType', label: 'Tax type', type: 'select', required: true, options: () => toOptions(taxTypes) },
-    { key: 'description', label: 'Description', type: 'text', required: true, full: true },
-    { key: 'ratePercent', label: 'Rate', type: 'percent', required: true },
-    { key: 'appliesTo', label: 'Applies to', type: 'select', options: () => toOptions(['Sales', 'Purchases', 'Both']) },
-    { key: 'atc', label: 'ATC', type: 'text', maxlength: 20, hint: 'Alphanumeric tax code, if applicable.' },
-    { key: 'active', label: 'Active', type: 'checkbox' },
-  ],
-  columns: [
-    { label: 'Code', value: (r) => text(r, 'code'), strong: true },
-    { label: 'Description', value: (r) => text(r, 'description'), sub: (r) => String(r.taxType ?? '') },
-    { label: 'Rate', value: (r) => `${Number(r.ratePercent).toFixed(2)}%`, numeric: true },
-    { label: 'Applies to', value: (r) => text(r, 'appliesTo') },
-    { label: 'ATC', value: (r) => text(r, 'atc') },
-    { label: 'Status', value: () => '', badge: activeBadge },
-  ],
-  schema: z.object({
-    code: required('Tax code'),
-    taxType: required('Tax type'),
-    description: required('Description'),
-    ratePercent: z.number('Rate must be a number.').min(0, 'Rate cannot be negative.').max(100, 'Rate cannot exceed 100%.'),
-  }),
-  validate: (draft, others) => duplicate(others, draft, 'code') ? 'This tax code is already in use.' : '',
-  label: (r) => String(r.code),
-  searchText: (r) => `${r.code} ${r.description} ${r.taxType} ${r.atc}`,
+  label: (r) => ownerFullName(r as unknown as Owner),
+  searchText: (r) => `${ownerFullName(r as unknown as Owner)} ${r.tin} ${r.email}`,
 })
 
 // ------------------------------------------------------------------ Users
 
-const users$ = defineRecords({
+const users$ = defineRecords<UserAccount>({
   singular: 'user',
   plural: 'users',
+  heading: 'Users',
   description: 'People who work in this accounting system and the role each one has.',
   note: 'Sign-in is not connected yet, so these accounts do not grant access. Roles describe the intended permissions.',
   store: users,
   auditModule: 'Company',
-  empty: () => ({ name: '', email: '', username: '', roleId: '', active: true }),
+  empty: () => ({ username: '', email: '', name: '', roleId: '', active: true }),
   fields: [
-    { key: 'name', label: 'Full name', type: 'text', required: true },
+    { key: 'username', label: 'Username', type: 'text', required: true, maxlength: 254, hint: 'Usually the email address.' },
     { key: 'email', label: 'Email', type: 'email', required: true, maxlength: 254 },
-    { key: 'username', label: 'Username', type: 'text', required: true, maxlength: 40 },
+    { key: 'name', label: 'Name', type: 'text', required: true, full: true },
     {
       key: 'roleId', label: 'Role', type: 'select', required: true,
       options: () => roles.value.map((role) => ({ value: role.id, label: role.active ? role.name : `${role.name} (inactive)`, disabled: !role.active })),
@@ -161,15 +71,15 @@ const users$ = defineRecords({
     { key: 'active', label: 'Active', type: 'checkbox' },
   ],
   columns: [
-    { label: 'Name', value: (r) => text(r, 'name'), sub: (r) => String(r.email ?? ''), strong: true },
     { label: 'Username', value: (r) => text(r, 'username') },
-    { label: 'Role', value: (r) => roles.value.find((role) => role.id === r.roleId)?.name ?? 'Unknown role' },
-    { label: 'Status', value: () => '', badge: activeBadge },
+    { label: 'Email', value: (r) => text(r, 'email') },
+    { label: 'Name', value: (r) => text(r, 'name') },
+    { label: 'Status', value: (r) => r.active ? 'Active' : 'Inactive', strong: true },
   ],
   schema: z.object({
-    name: required('Full name'),
+    username: z.string().trim().regex(/^[a-z0-9._@+-]{3,254}$/i, 'Username needs 3 or more letters, numbers, or . _ @ + - characters.'),
     email: z.email('Enter a valid email address.'),
-    username: z.string().trim().regex(/^[a-z0-9._-]{3,40}$/i, 'Username needs 3–40 letters, numbers, dots, dashes, or underscores.'),
+    name: required('Name'),
     roleId: required('Role'),
   }),
   validate: (draft, others) => {
@@ -178,7 +88,7 @@ const users$ = defineRecords({
     return ''
   },
   label: (r) => String(r.name),
-  searchText: (r) => `${r.name} ${r.email} ${r.username}`,
+  searchText: (r) => `${r.username} ${r.email} ${r.name}`,
 })
 
 // ------------------------------------------------------------------ Items
@@ -208,7 +118,7 @@ function itemConfig(kind: ItemKind, store: typeof goods, words: { singular: stri
       { label: words.unit, value: (r) => text(r, 'unit') },
       { label: words.price, value: (r) => peso(r.sellingPrice), numeric: true },
       ...(words.showCost ? [{ label: 'Cost', value: (r: AnyRecord) => peso(r.cost), numeric: true }] : []),
-      { label: 'Status', value: () => '', badge: activeBadge },
+      { label: 'Active?', value: () => '', check: (r: AnyRecord) => Boolean(r.active) },
     ],
     schema: z.object({ code: required('Code'), name: required('Name'), sellingPrice: amountField(words.price), cost: amountField('Cost') }),
     validate: (draft, others) => duplicate(others, draft, 'code') ? 'This code is already in use.' : '',
@@ -259,7 +169,7 @@ const messageTemplates$ = defineRecords<MessageTemplate>({
     { label: 'Name', value: (r) => text(r, 'name'), sub: (r) => r.channel === 'Email' ? String(r.subject ?? '') : '', strong: true },
     { label: 'Channel', value: (r) => text(r, 'channel') },
     { label: 'Used for', value: (r) => text(r, 'purpose') },
-    { label: 'Status', value: () => '', badge: activeBadge },
+    { label: 'Active?', value: () => '', check: (r: AnyRecord) => Boolean(r.active) },
   ],
   schema: z.object({ name: required('Template name'), channel: z.string(), subject: z.string(), body: required('Message') })
     .refine((r) => r.channel !== 'Email' || r.subject.trim(), 'Email templates need a subject.'),
@@ -305,7 +215,7 @@ const series$ = defineRecords<DocumentSeries>({
     { label: 'Document type', value: (r) => text(r, 'documentType'), strong: true },
     { label: 'Next number', value: (r) => formatSeriesNumber(r as unknown as DocumentSeries) },
     { label: 'Restarts', value: (r) => text(r, 'resetFrequency') },
-    { label: 'Status', value: () => '', badge: activeBadge },
+    { label: 'Active?', value: () => '', check: (r: AnyRecord) => Boolean(r.active) },
   ],
   schema: z.object({
     documentType: required('Document type'),
@@ -328,7 +238,7 @@ const reportTemplates$ = defineRecords({
   singular: 'report template',
   plural: 'report templates',
   description: 'Page setup and wording for printed accounting reports.',
-  note: 'Printed reports currently use the signatories and footer from Company › Reporting. Templates will apply once the print layout supports them.',
+  note: 'Printed reports currently use the signatories from Company › Reporting. Templates will apply once the print layout supports them.',
   store: reportTemplates,
   auditModule: 'Company',
   empty: () => ({ name: '', report: '', paperSize: 'A4', orientation: 'Portrait', headerText: '', footerText: '', showSignatories: true, isDefault: false }),
@@ -358,8 +268,6 @@ const reportTemplates$ = defineRecords({
 
 export const recordPages: Record<string, RecordsConfig> = {
   'company-owners': owners$,
-  'company-registration': registrations$,
-  'company-tax-rules': taxRules$,
   users: users$,
   goods: itemConfig('goods', goods, { singular: 'good', plural: 'goods', description: 'Products you sell or buy, with their unit and prices.', unit: 'Unit', unitHint: 'e.g. pc, box, kg', price: 'Selling price', showCost: true }),
   services: itemConfig('services', services, { singular: 'service', plural: 'services', description: 'Services you bill for, with their billing unit and rate.', unit: 'Billing unit', unitHint: 'e.g. hour, project', price: 'Rate', showCost: false }),
