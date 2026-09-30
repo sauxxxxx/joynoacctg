@@ -1,24 +1,28 @@
 import { z } from 'zod'
 import { parseIsoDate } from '../../../components/ui/dateUtils'
-import type { JournalPreviewEntry } from './journalPreviewData'
+import { accounts } from '../setup/accountSetupData'
+import type { GeneralJournalType, JournalPreviewEntry } from './journalPreviewData'
 import type { PurchaseJournalLine } from './purchaseJournalData'
 
 export interface JournalDraftLineInput {
   accountName: string
   debit: string
   credit: string
+  remarks: string
 }
 
 export interface JournalDraftInput {
+  journalNumber: string
+  journalType: GeneralJournalType | ''
   date: string
-  referenceNumber: string
   remarks: string
   lines: JournalDraftLineInput[]
 }
 
 const headerSchema = z.object({
+  journalNumber: z.string().trim().min(1, 'A General Journal number is required.'),
+  journalType: z.enum(['Adjusting Entry', 'Reversing Entry', 'Beginning Balance', 'Closing Entry'], { message: 'Choose a General Journal type.' }),
   date: z.string().refine((value) => Boolean(parseIsoDate(value)), 'Choose a valid date.'),
-  referenceNumber: z.string().trim().min(1, 'Enter a reference number.'),
   remarks: z.string(),
 })
 
@@ -41,21 +45,24 @@ export function validateJournalDraft(input: JournalDraftInput, existing?: Journa
   let totalCredit = 0
   for (const [index, line] of input.lines.entries()) {
     if (!line.accountName.trim()) return { error: `Enter an account on line ${index + 1}.` }
+    if (!accounts.value.some((account) => account.active && account.name === line.accountName.trim())) {
+      return { error: `Choose an active Chart of Accounts entry on line ${index + 1}.` }
+    }
     const debitCents = amountInCents(line.debit)
     const creditCents = amountInCents(line.credit)
     if (debitCents === null || creditCents === null) return { error: `Enter a valid amount on line ${index + 1}.` }
     if ((debitCents > 0) === (creditCents > 0)) return { error: `Enter either a debit or a credit on line ${index + 1}.` }
     totalDebit += debitCents
     totalCredit += creditCents
-    lines.push({ accountName: line.accountName.trim(), debitCents, creditCents })
+    lines.push({ accountName: line.accountName.trim(), debitCents, creditCents, remarks: line.remarks.trim() })
   }
   if (totalDebit !== totalCredit) return { error: 'Debits and credits must balance before saving.' }
 
   return {
     entry: {
-      id: existing?.id ?? crypto.randomUUID(), journalNumber: '', referenceNumber: header.data.referenceNumber,
+      id: existing?.id ?? crypto.randomUUID(), journalNumber: header.data.journalNumber, referenceNumber: '',
       date: header.data.date, party: '', amountCents: totalDebit, status: 'Draft',
-      remarks: header.data.remarks.trim(), createdBy: 'Current session', lines,
+      remarks: header.data.remarks.trim(), createdBy: 'Current session', lines, journalType: header.data.journalType,
     },
   }
 }

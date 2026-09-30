@@ -13,7 +13,7 @@ const balanced = computed(() => totals.value.debitCents === totals.value.creditC
   <section class="journal-detail" aria-label="Journal accounting lines">
     <template v-if="entry">
       <div class="journal-detail__heading">
-        <span :title="entry.referenceNumber">{{ entry.referenceNumber }}</span>
+        <span :title="entry.referenceNumber || entry.journalNumber">{{ entry.referenceNumber || `GJ #${entry.journalNumber}` }}<template v-if="entry.journalType"> · {{ entry.journalType }}</template></span>
         <span v-if="entry.lines.length" :class="{ 'journal-detail__balance--error': !balanced }">{{ balanced ? 'Balanced' : 'Out of balance' }}</span>
       </div>
       <div v-if="entry.lines.length" class="journal-detail__scroll">

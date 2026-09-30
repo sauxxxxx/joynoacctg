@@ -46,9 +46,9 @@ const totalCents = computed(() => props.entries.reduce((sum, entry) => sum + ent
           <th scope="col">Created By</th>
         </tr></thead>
         <tbody><tr v-for="entry in entries" :key="entry.id" :class="{ 'journal-table__row--selected': selectedIds.includes(entry.id) }">
-          <td class="journal-table__check"><input type="checkbox" :aria-label="`Select ${entry.referenceNumber}`" :checked="selectedIds.includes(entry.id)" :disabled="!reviewMode" @change="emit('toggle', entry.id)" /></td>
+          <td class="journal-table__check"><input type="checkbox" :aria-label="`Select ${entry.referenceNumber || entry.journalNumber}`" :checked="selectedIds.includes(entry.id)" :disabled="!reviewMode" @change="emit('toggle', entry.id)" /></td>
           <td>{{ entry.journalNumber }}</td>
-          <td><button class="journal-table__reference" type="button" :aria-label="`View ${entry.referenceNumber}`" @click="emit('open', entry)">{{ entry.referenceNumber }}</button></td>
+          <td><button class="journal-table__reference" type="button" :aria-label="`View ${entry.referenceNumber || entry.journalNumber}`" @click="emit('open', entry)">{{ entry.referenceNumber || '—' }}</button></td>
           <td class="journal-table__date">{{ formatJournalDate(entry.date) }}</td>
           <td v-if="config.partyLabel"><span class="journal-table__truncate" :title="entry.party">{{ entry.party }}</span></td>
           <td class="journal-table__amount">{{ formatJournalAmount(entry.amountCents) }}</td>

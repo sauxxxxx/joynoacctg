@@ -74,9 +74,9 @@ export const navigation: NavigationItem[] = [
     ]),
     group('payments', 'Payments', [
       group('vouchers', 'Vouchers', [
-        page('cash-voucher', 'Cash Voucher', FileCheck2),
-        page('check-voucher', 'Check Voucher', FileCheck2),
-        page('petty-cash-voucher', 'Petty Cash Voucher', FileCheck2),
+        page('cash-voucher', 'Cash Vouchers', FileCheck2),
+        page('check-voucher', 'Check Vouchers', FileCheck2),
+        page('petty-cash-voucher', 'Petty Cash Vouchers', FileCheck2),
       ]),
       group('purchase-receipts-group', 'Receipts', [
         page('purchase-receipts', 'Receipts', ReceiptText),
@@ -84,7 +84,7 @@ export const navigation: NavigationItem[] = [
     ], Wallet),
     group('purchases-setup', 'Setup', [
       page('vendors', 'Vendors', UsersRound),
-      page('revolving-fund-customers', 'Revolving Fund Customers', UsersRound),
+      page('revolving-fund-customers', 'Revolving Fund Custodians', UsersRound),
       page('purchases-discount-types', 'Discount Types', CircleDollarSign),
       page('purchases-payment-terms', 'Payment Terms', FileClock),
       page('purchases-payment-methods', 'Payment Methods', CreditCard),

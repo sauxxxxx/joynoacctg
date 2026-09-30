@@ -71,15 +71,14 @@ function toggleExpanded(code: string) { expanded.value = expanded.value.includes
 
 <template>
   <section class="setup-page" :aria-label="isCategories ? 'Account Categories' : 'Chart of Accounts'">
-    <nav v-if="!isCategories" class="setup-tabs" aria-label="Chart of Accounts views">
-      <button v-for="item in ([['accounts', 'Accounts'], ['tree', 'Account Tree View'], ['mapping', 'Mapping']] as const)" :key="item[0]" type="button" :class="{ 'setup-tabs__active': tab === item[0] }" :aria-current="tab === item[0] ? 'page' : undefined" @click="tab = item[0]">{{ item[1] }}</button>
-    </nav>
-    <header v-if="isCategories || tab !== 'tree'" class="setup-toolbar">
-      <div><h1>{{ title }}</h1><span class="setup-toolbar__note">Preview records · Changes reset on reload</span></div>
-      <div class="setup-toolbar__actions">
+    <header class="setup-toolbar">
+      <nav v-if="!isCategories" class="setup-tabs" aria-label="Chart of Accounts views">
+        <button v-for="item in ([['accounts', 'Accounts'], ['tree', 'Account Tree View'], ['mapping', 'Mapping']] as const)" :key="item[0]" type="button" :class="{ 'setup-tabs__active': tab === item[0] }" :aria-current="tab === item[0] ? 'page' : undefined" @click="tab = item[0]">{{ item[1] }}</button>
+      </nav>
+      <div v-if="isCategories || tab !== 'tree'" class="setup-toolbar__actions">
         <label class="setup-search"><Search :size="15" aria-hidden="true" /><input v-model="search" type="search" :aria-label="`Search ${title}`" placeholder="Type to filter" /></label>
         <button type="button" class="setup-icon-button" :aria-pressed="activeOnly" :title="activeOnly ? 'Show all records' : 'Show active only'" aria-label="Toggle active filter" @click="activeOnly = !activeOnly"><ListFilter :size="17" /></button>
-        <button type="button" class="setup-icon-button" :aria-label="`Add ${isCategories ? 'category' : 'account'}`" @click="openEditor()"><Plus :size="19" /></button>
+        <button type="button" class="setup-button setup-button--primary" @click="openEditor()"><Plus :size="16" aria-hidden="true" /> New {{ isCategories ? 'category' : 'account' }}</button>
         <button type="button" class="setup-icon-button" :aria-pressed="compact" title="Toggle compact rows" aria-label="Toggle compact rows" @click="compact = !compact"><LayoutGrid :size="18" /></button>
       </div>
     </header>
