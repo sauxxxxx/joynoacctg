@@ -1,0 +1,38 @@
+.purchase-report-page { min-width: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; padding-top: 14px; }
+.purchase-report-toolbar { min-height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.purchase-report-toolbar h2 { margin: 0; color: #252c31; font-size: 16px; font-weight: 650; letter-spacing: -.015em; }
+.purchase-report-filter-control { position: relative; }
+.purchase-report-icon { width: 36px; height: 36px; display: grid; place-items: center; padding: 0; border: 1px solid #dce1e4; border-radius: 5px; background: #fff; color: #344454; }
+.purchase-report-icon:hover, .purchase-report-icon[aria-expanded="true"] { background: #edf2f5; border-color: #a7b8c3; }
+.purchase-report-filters { position: absolute; z-index: 30; top: calc(100% + 8px); right: 0; width: 300px; padding: 18px; border: 1px solid #d6dde1; border-radius: 7px; background: #fff; box-shadow: 0 12px 30px rgba(22,30,36,.16); }
+.purchase-report-filters__heading { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 18px; color: #5a646d; }
+.purchase-report-filters__heading strong, .purchase-report-filters__heading span { display: block; }
+.purchase-report-filters__heading strong { color: #293138; font-size: 13px; font-weight: 650; }
+.purchase-report-filters__heading span { margin-top: 3px; color: #7a858d; font-size: 11px; font-weight: 400; }
+.purchase-report-filters form { display: flex; flex-direction: column; gap: 17px; }
+.purchase-report-filters label { display: flex; flex-direction: column; gap: 7px; color: #53616b; font-size: 12px; font-weight: 600; }
+.purchase-report-filters label span { color: #a23140; }
+.purchase-report-filters input { width: 100%; min-height: 39px; padding: 7px 10px; border: 1px solid #dce1e4; border-radius: 5px; background: #fff; color: #263139; font-size: 12px; font-weight: 400; }
+.purchase-report-filters__actions { display: flex; justify-content: flex-end; gap: 8px; }
+.purchase-report-error { margin: 0; color: #a23140; font-size: 11px; }
+.purchase-report-button { min-height: 36px; display: inline-flex; align-items: center; justify-content: center; padding: 0 13px; border: 1px solid #dbe1e5; border-radius: 5px; background: #fff; color: #34434e; font-size: 12px; font-weight: 600; }
+.purchase-report-button:hover { background: #f5f7f8; }
+.purchase-report-button--primary { border-color: #26313b; background: #26313b; color: #fff; }
+.purchase-report-button--primary:hover { background: #3a454f; }
+.purchase-report-panel { min-width: 0; min-height: 0; flex: 1; overflow: auto; border: 1px solid var(--border); border-radius: 7px; background: #fff; }
+.purchase-report-content { padding: 22px; }
+.purchase-report-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.purchase-report-heading--center { flex-direction: column; justify-content: center; gap: 4px; text-align: center; }
+.purchase-report-heading h3 { margin: 0; color: #29353e; font-size: 15px; font-weight: 650; }
+.purchase-report-heading span { color: #7c878f; font-size: 12px; }
+.purchase-report-table-scroll { overflow-x: auto; }
+.purchase-report-table { width: 100%; border-collapse: collapse; color: #313a41; font-size: 12px; }
+.purchase-report-table--aging { min-width: 980px; }
+.purchase-report-table th { height: 44px; padding: 0 14px; border: 1px solid #e3e7ea; background: #fbfcfc; color: #69747c; text-align: left; font-size: 10px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; }
+.purchase-report-table td { height: 46px; padding: 8px 14px; border: 1px solid #e8ecee; }
+.purchase-report-table tbody tr:hover td { background: #fafbfb; }
+.purchase-report-table tfoot th, .purchase-report-table tfoot td { border: 1px solid #dce1e4; background: #fff; color: #29353e; font-weight: 700; }
+.purchase-report-table__number { text-align: right !important; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.purchase-report-empty { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px; text-align: center; }
+.purchase-report-empty strong { color: #34404a; font-size: 13px; font-weight: 600; }
+.purchase-report-empty p { margin: 7px 0 15px; color: #79838c; font-size: 12px; }

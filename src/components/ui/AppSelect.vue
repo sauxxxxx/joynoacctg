@@ -28,8 +28,10 @@ const listId = `${uid}-options`
 const labelId = `${uid}-label`
 const valueId = `${uid}-value`
 const root = ref<HTMLElement | null>(null)
+const list = ref<HTMLElement | null>(null)
 const isOpen = ref(false)
 const activeIndex = ref(0)
+const listStyle = ref<Record<string, string>>({})
 const selectedIndex = computed(() => props.options.findIndex((option) => option.value === props.modelValue))
 const selectedOption = computed(() => props.options[selectedIndex.value])
 
@@ -48,10 +50,37 @@ function setActive(index: number) {
   nextTick(() => document.getElementById(`${listId}-${index}`)?.scrollIntoView({ block: 'nearest' }))
 }
 
+function updateListPosition() {
+  if (!isOpen.value || !root.value) return
+  const trigger = root.value.querySelector<HTMLElement>('.ui-select__trigger')
+  if (!trigger) return
+  const rect = trigger.getBoundingClientRect()
+  const edge = 8
+  const gap = 4
+  const naturalHeight = Math.min(list.value?.scrollHeight ?? 224, 224)
+  const roomBelow = window.innerHeight - rect.bottom - edge
+  const roomAbove = rect.top - edge
+  const opensAbove = roomBelow < naturalHeight && roomAbove > roomBelow
+  const availableHeight = Math.max(96, (opensAbove ? roomAbove : roomBelow) - gap)
+  const height = Math.min(naturalHeight, availableHeight)
+  const width = Math.min(Math.max(rect.width, 150), window.innerWidth - edge * 2)
+  const left = Math.min(Math.max(edge, rect.left), window.innerWidth - width - edge)
+  const top = opensAbove
+    ? Math.max(edge, rect.top - height - gap)
+    : Math.min(window.innerHeight - height - edge, rect.bottom + gap)
+  listStyle.value = {
+    top: `${Math.round(top)}px`,
+    left: `${Math.round(left)}px`,
+    width: `${Math.round(width)}px`,
+    maxHeight: `${Math.round(height)}px`,
+  }
+}
+
 function open() {
   if (props.disabled || !props.options.length) return
   isOpen.value = true
   setActive(nextEnabled(selectedIndex.value >= 0 ? selectedIndex.value : 0, 1))
+  nextTick(updateListPosition)
 }
 
 function choose(index: number) {
@@ -92,8 +121,20 @@ function onPointerDown(event: PointerEvent) {
   if (root.value && !root.value.contains(event.target as Node)) isOpen.value = false
 }
 
-onMounted(() => document.addEventListener('pointerdown', onPointerDown))
-onBeforeUnmount(() => document.removeEventListener('pointerdown', onPointerDown))
+function onViewportChange() {
+  if (isOpen.value) updateListPosition()
+}
+
+onMounted(() => {
+  document.addEventListener('pointerdown', onPointerDown)
+  window.addEventListener('resize', onViewportChange)
+  window.addEventListener('scroll', onViewportChange, true)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onPointerDown)
+  window.removeEventListener('resize', onViewportChange)
+  window.removeEventListener('scroll', onViewportChange, true)
+})
 </script>
 
 <template>
@@ -111,7 +152,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onPointerDown)
       <span :id="valueId" :class="{ 'ui-select__placeholder': !selectedOption }">{{ selectedOption?.label || placeholder }}</span>
       <ChevronDown :size="16" aria-hidden="true" />
     </button>
-    <ul v-if="isOpen" :id="listId" class="ui-select__list" role="listbox" :aria-labelledby="labelId">
+    <ul v-if="isOpen" :id="listId" ref="list" class="ui-select__list" role="listbox" :aria-labelledby="labelId" :style="listStyle">
       <li v-for="(option, index) in options" :id="`${listId}-${index}`" :key="option.value"
         role="option" :aria-selected="modelValue === option.value" :aria-disabled="option.disabled || undefined"
         class="ui-select__option" :class="{ 'ui-select__option--active': activeIndex === index }"

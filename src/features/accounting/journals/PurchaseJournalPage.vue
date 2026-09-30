@@ -127,6 +127,7 @@ function toggleAll() {
   <section class="journal-page" aria-label="Purchase Journal">
     <div class="journal-page__toolbar">
       <div class="journal-page__toolbar-left">
+        <h1 class="journal-page__title">Purchase Journal</h1>
         <label class="journal-switch">
           <input v-model="reviewMode" type="checkbox" />
           <span class="journal-switch__track" aria-hidden="true" />

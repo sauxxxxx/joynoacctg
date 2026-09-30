@@ -12,7 +12,7 @@
 .ui-select__trigger { cursor: pointer; }
 .ui-select__trigger > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-select__placeholder, .ui-date-picker__placeholder { color: #69727b; }
-.ui-select__list { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; width: max(100%, 150px); max-height: 224px; margin: 0; padding: 4px; overflow-y: auto; border: 1px solid #d7dde1; border-radius: 6px; background: #fff; box-shadow: 0 10px 24px rgba(22, 30, 36, .14); list-style: none; scrollbar-width: thin; }
+.ui-select__list { position: fixed; z-index: 300; max-height: 224px; margin: 0; padding: 4px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid #d7dde1; border-radius: 6px; background: #fff; box-shadow: 0 10px 24px rgba(22, 30, 36, .14); list-style: none; scrollbar-width: thin; }
 .ui-select__option { min-height: 34px; display: flex; align-items: center; padding: 6px 9px; border-radius: 4px; color: #303940; cursor: pointer; font-size: 12px; }
 .ui-select__option--active { background: #edf2f5; }
 .ui-select__option[aria-selected='true'] { font-weight: 700; }
