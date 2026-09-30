@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 56" role="img" aria-labelledby="title">
+  <title id="title">Joyno</title>
+  <g fill="none" stroke="currentColor" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8 54V32c0-8 4-14 11-18L50 1v11c0 7-4 13-10 17L21 40v14"/>
+    <path d="M26 54V42c0-7 3-12 9-16l22-13v12c0 6-3 11-9 15l-9 5v9"/>
+    <path d="M44 54v-5c0-5 3-9 7-12l12-7v10c0 5-3 9-7 12l-4 2"/>
+  </g>
+</svg>

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { Menu, Search, X } from '@lucide/vue'
+import { Search, X } from '@lucide/vue'
 import NavNode from './NavNode.vue'
+import BrandLogo from './BrandLogo.vue'
 import { findAncestorIds, navigation, type NavigationItem } from '../navigation'
 
 const props = defineProps<{
@@ -74,8 +75,7 @@ function select(id: string) {
     aria-label="Main navigation"
   >
     <div class="sidebar__brand">
-      <div class="brand-mark" aria-hidden="true"><span /><span /><span /></div>
-      <div class="brand-name"><strong>Joyno</strong><span>Accounting</span></div>
+      <BrandLogo />
       <button ref="closeButton" class="icon-button sidebar__close" type="button" aria-label="Close navigation" @click="emit('close')">
         <X :size="18" aria-hidden="true" />
       </button>
@@ -105,8 +105,7 @@ function select(id: string) {
     </nav>
 
     <div class="sidebar__footer">
-      <div class="sidebar__footer-icon"><Menu :size="16" aria-hidden="true" /></div>
-      <div class="sidebar__footer-copy"><strong>Joyno</strong><span>Accounting</span></div>
+      <BrandLogo compact />
     </div>
   </aside>
 </template>

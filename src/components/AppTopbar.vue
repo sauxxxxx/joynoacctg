@@ -2,12 +2,16 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Bell, Menu, PanelLeftClose, PanelLeftOpen, Search } from '@lucide/vue'
 import { searchPages } from '../navigation'
+import type { AuthUser } from '../features/auth/authTypes'
+import AccountMenu from './AccountMenu.vue'
+import BrandLogo from './BrandLogo.vue'
 
-defineProps<{ collapsed: boolean; isMobile: boolean }>()
+defineProps<{ collapsed: boolean; isMobile: boolean; user: AuthUser }>()
 
 const emit = defineEmits<{
   toggleSidebar: []
   select: [id: string]
+  logout: []
 }>()
 
 const query = ref('')
@@ -64,7 +68,7 @@ onBeforeUnmount(() => {
         <PanelLeftOpen v-if="collapsed" class="topbar__desktop-menu" :size="19" aria-hidden="true" />
         <PanelLeftClose v-else class="topbar__desktop-menu" :size="19" aria-hidden="true" />
       </button>
-      <div class="topbar__brand"><strong>Joyno</strong><span>Accounting</span></div>
+      <BrandLogo class="topbar__brand" compact />
     </div>
 
     <div ref="searchContainer" class="topbar__search-wrap">
@@ -103,10 +107,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <div class="topbar__divider" />
-      <div class="account-chip" aria-label="Account">
-        <span class="account-chip__avatar">A</span>
-        <span class="account-chip__name">Accounting</span>
-      </div>
+      <AccountMenu :user="user" @navigate="select" @logout="emit('logout')" />
     </div>
   </header>
 </template>

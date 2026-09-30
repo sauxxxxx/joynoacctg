@@ -6,6 +6,9 @@ import PurchaseJournalPage from './features/accounting/journals/PurchaseJournalP
 import JournalPreviewPage from './features/accounting/journals/JournalPreviewPage.vue'
 import type { JournalPreviewKind } from './features/accounting/journals/journalPreviewData'
 import AccountSetupPage from './features/accounting/setup/AccountSetupPage.vue'
+import LoginPage from './features/auth/LoginPage.vue'
+import { useAuth } from './features/auth/authStore'
+import type { AuthCredentials } from './features/auth/authTypes'
 import PurchasesPage from './features/purchases/PurchasesPage.vue'
 import type { PurchaseKind } from './features/purchases/purchasePreviewData'
 import PurchaseSetupPage from './features/purchases/setup/PurchaseSetupPage.vue'
@@ -34,6 +37,7 @@ import type { DocumentKind, SetupKind } from './features/sales/salesPreviewStore
 import { findPage } from './navigation'
 
 const activeId = ref('dashboard')
+const { authUser, authenticating, authError, signIn, signOut, clearAuthError } = useAuth()
 const sidebarCollapsed = ref(false)
 const mobileOpen = ref(false)
 const isMobile = ref(false)
@@ -99,7 +103,21 @@ function syncPageFromUrl() {
   activeId.value = id && findPage(id) ? id : 'dashboard'
 }
 
-watch(activePage, (page) => { document.title = `${page.label} | Joyno Accounting` })
+function handleSignIn(credentials: AuthCredentials) {
+  void signIn(credentials)
+}
+
+function handleSignOut() {
+  signOut()
+  activeId.value = 'dashboard'
+  const url = new URL(window.location.href)
+  url.searchParams.delete('page')
+  window.history.replaceState(null, '', url)
+}
+
+watch([activePage, authUser], ([page, user]) => {
+  document.title = user ? `${page.label} | Joyno Accounting` : 'Sign in | Joyno Accounting'
+}, { immediate: true })
 
 onMounted(() => {
   syncPageFromUrl()
@@ -116,50 +134,53 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <a class="skip-link" href="#main-content">Skip to content</a>
-  <div class="app-shell" :class="{ 'app-shell--collapsed': sidebarCollapsed, 'app-shell--journal': isWorkspacePage }">
-    <AppSidebar
-      :active-id="activeId"
-      :collapsed="sidebarCollapsed"
-      :mobile-open="mobileOpen"
-      :is-mobile="isMobile"
-      @select="selectPage"
-      @close="closeMobile"
-      @expand="sidebarCollapsed = false"
-    />
-    <div class="app-shell__body" :inert="mobileOpen">
-      <AppTopbar :collapsed="sidebarCollapsed" :is-mobile="isMobile" @toggle-sidebar="toggleSidebar" @select="selectPage" />
-      <main id="main-content" class="page-content" :class="{ 'page-content--journal': isWorkspacePage }" tabindex="-1">
-        <div v-if="!isSalesPage && !isWorkspacePage" class="page-content__heading">
-          <nav v-if="activePage.path.length > 1" class="breadcrumbs" aria-label="Breadcrumb">
-            <template v-for="(part, index) in activePage.path" :key="`${part}-${index}`">
-              <span v-if="index > 0" class="breadcrumbs__divider">/</span><span :class="{ 'breadcrumbs__current': index === activePage.path.length - 1 }">{{ part }}</span>
-            </template>
-          </nav>
-          <h1>{{ activePage.label }}</h1>
-        </div>
-        <div class="page-content__canvas">
-          <PurchaseJournalPage v-if="activeId === 'purchase-journal'" />
-          <JournalPreviewPage v-else-if="journalPreviewId" :key="journalPreviewId" :kind="journalPreviewId" />
-          <AccountSetupPage v-else-if="accountSetupPageId" :key="accountSetupPageId" :page-id="accountSetupPageId" />
-          <PurchasesPage v-else-if="purchasePageId" :key="purchasePageId" :kind="purchasePageId" />
-          <PurchaseSetupPage v-else-if="purchaseSetupPageId" :key="purchaseSetupPageId" :page-id="purchaseSetupPageId" />
-          <PurchaseReportsPage v-else-if="purchaseReportPageId" :key="purchaseReportPageId" :page-id="purchaseReportPageId" />
-          <TaxFormsPage v-else-if="taxFormPageId" :key="taxFormPageId" :form-id="taxFormPageId" />
-          <YearlyTaxFormsPage v-else-if="yearlyTaxFormPageId" :key="yearlyTaxFormPageId" :form-id="yearlyTaxFormPageId" />
-          <TaxCertificatesPage v-else-if="taxCertificatePageId" :key="taxCertificatePageId" :form-id="taxCertificatePageId" />
-          <BankAccountsPage v-else-if="activeId === 'bank-accounts'" />
-          <BankTransactionsPage v-else-if="activeId === 'bank-transactions'" />
-          <FixedAssetsPage v-else-if="isFixedAssetsPage" />
-          <CustomersPage v-else-if="activeId === 'customers'" />
-          <SalesDocumentsPage v-else-if="documentPageId" :page-id="documentPageId" />
-          <SalesSetupPage v-else-if="setupPageId" :page-id="setupPageId" />
-          <SalesReportsPage v-else-if="reportPageId" :page-id="reportPageId" />
-          <AccountingReportsPage v-else-if="accountingReportId" :page-id="accountingReportId" @navigate="selectPage" />
-          <AnalyticsPage v-else-if="analyticsId" :key="analyticsId" :page-id="analyticsId" />
-          <CompanyPage v-else-if="companyId" :key="companyId" :page-id="companyId" />
-        </div>
-      </main>
+  <LoginPage v-if="!authUser" :loading="authenticating" :error="authError" @sign-in="handleSignIn" @clear-error="clearAuthError" />
+  <template v-else>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <div class="app-shell" :class="{ 'app-shell--collapsed': sidebarCollapsed, 'app-shell--journal': isWorkspacePage }">
+      <AppSidebar
+        :active-id="activeId"
+        :collapsed="sidebarCollapsed"
+        :mobile-open="mobileOpen"
+        :is-mobile="isMobile"
+        @select="selectPage"
+        @close="closeMobile"
+        @expand="sidebarCollapsed = false"
+      />
+      <div class="app-shell__body" :inert="mobileOpen">
+        <AppTopbar :collapsed="sidebarCollapsed" :is-mobile="isMobile" :user="authUser" @toggle-sidebar="toggleSidebar" @select="selectPage" @logout="handleSignOut" />
+        <main id="main-content" class="page-content" :class="{ 'page-content--journal': isWorkspacePage }" tabindex="-1">
+          <div v-if="!isSalesPage && !isWorkspacePage" class="page-content__heading">
+            <nav v-if="activePage.path.length > 1" class="breadcrumbs" aria-label="Breadcrumb">
+              <template v-for="(part, index) in activePage.path" :key="`${part}-${index}`">
+                <span v-if="index > 0" class="breadcrumbs__divider">/</span><span :class="{ 'breadcrumbs__current': index === activePage.path.length - 1 }">{{ part }}</span>
+              </template>
+            </nav>
+            <h1>{{ activePage.label }}</h1>
+          </div>
+          <div class="page-content__canvas">
+            <PurchaseJournalPage v-if="activeId === 'purchase-journal'" />
+            <JournalPreviewPage v-else-if="journalPreviewId" :key="journalPreviewId" :kind="journalPreviewId" />
+            <AccountSetupPage v-else-if="accountSetupPageId" :key="accountSetupPageId" :page-id="accountSetupPageId" />
+            <PurchasesPage v-else-if="purchasePageId" :key="purchasePageId" :kind="purchasePageId" />
+            <PurchaseSetupPage v-else-if="purchaseSetupPageId" :key="purchaseSetupPageId" :page-id="purchaseSetupPageId" />
+            <PurchaseReportsPage v-else-if="purchaseReportPageId" :key="purchaseReportPageId" :page-id="purchaseReportPageId" />
+            <TaxFormsPage v-else-if="taxFormPageId" :key="taxFormPageId" :form-id="taxFormPageId" />
+            <YearlyTaxFormsPage v-else-if="yearlyTaxFormPageId" :key="yearlyTaxFormPageId" :form-id="yearlyTaxFormPageId" />
+            <TaxCertificatesPage v-else-if="taxCertificatePageId" :key="taxCertificatePageId" :form-id="taxCertificatePageId" />
+            <BankAccountsPage v-else-if="activeId === 'bank-accounts'" />
+            <BankTransactionsPage v-else-if="activeId === 'bank-transactions'" />
+            <FixedAssetsPage v-else-if="isFixedAssetsPage" />
+            <CustomersPage v-else-if="activeId === 'customers'" />
+            <SalesDocumentsPage v-else-if="documentPageId" :page-id="documentPageId" />
+            <SalesSetupPage v-else-if="setupPageId" :page-id="setupPageId" />
+            <SalesReportsPage v-else-if="reportPageId" :page-id="reportPageId" />
+            <AccountingReportsPage v-else-if="accountingReportId" :page-id="accountingReportId" @navigate="selectPage" />
+            <AnalyticsPage v-else-if="analyticsId" :key="analyticsId" :page-id="analyticsId" />
+            <CompanyPage v-else-if="companyId" :key="companyId" :page-id="companyId" />
+          </div>
+        </main>
+      </div>
     </div>
-  </div>
+  </template>
 </template>
