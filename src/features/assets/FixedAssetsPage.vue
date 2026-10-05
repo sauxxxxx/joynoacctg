@@ -2,6 +2,10 @@
 import { computed, ref } from 'vue'
 import { LayoutGrid, Plus, Search } from '@lucide/vue'
 import { formatMoney } from '../../lib/money'
+import { confirmAction, showAlert } from '../../services/dialogService'
+import { purchaseSetupRecords } from '../purchases/setup/purchaseSetupData'
+import { goods } from '../company/companyStore'
+import { fixedAssetRepository } from '../../services/previewRepositories'
 import FixedAssetEditor from './FixedAssetEditor.vue'
 import {
   accumulatedDepreciationCents, bookValueCents, fixedAssets, isDepreciated, monthlyDepreciationCents,
@@ -22,7 +26,7 @@ const depreciatedAssets = computed(() => fixedAssets.value.filter(isDepreciated)
 const visibleAssets = computed(() => {
   const source = tab.value === 'active' ? activeAssets.value : depreciatedAssets.value
   const term = query.value.trim().toLocaleLowerCase()
-  return source.filter((asset) => !term || [asset.trackingNumber, asset.description, asset.vendor, asset.goods, asset.remarks, asset.salesInvoice].some((value) => value.toLocaleLowerCase().includes(term)))
+  return source.filter((asset) => !term || [asset.trackingNumber, asset.description, vendorName(asset.vendorId), itemName(asset.itemId), asset.remarks, asset.salesInvoice].some((value) => value.toLocaleLowerCase().includes(term)))
 })
 const visibleUnclaimed = computed(() => {
   const term = query.value.trim().toLocaleLowerCase()
@@ -30,20 +34,20 @@ const visibleUnclaimed = computed(() => {
 })
 const activeBookValue = computed(() => visibleAssets.value.reduce((sum, asset) => sum + bookValueCents(asset), 0))
 const unclaimedTotal = computed(() => visibleUnclaimed.value.reduce((sum, item) => sum + item.amountCents + item.vatCents, 0))
+const vendorName = (id: string) => purchaseSetupRecords.value.find((record) => record.kind === 'vendors' && record.id === id)?.name ?? 'Unknown vendor'
+const itemName = (id: string) => goods.value.find((item) => item.id === id)?.name ?? ''
 
 function openEditor(record: FixedAssetRecord | null = null) { editing.value = record; editorOpen.value = true; notice.value = '' }
-function saveRecord(record: FixedAssetRecord) {
+async function saveRecord(record: FixedAssetRecord) {
   const duplicate = fixedAssets.value.some((item) => item.id !== record.id && record.trackingNumber && item.trackingNumber === record.trackingNumber)
-  if (duplicate) { window.alert('That asset tracking number is already in use.'); return }
-  const index = fixedAssets.value.findIndex((item) => item.id === record.id)
-  if (index >= 0) fixedAssets.value.splice(index, 1, record)
-  else fixedAssets.value.push(record)
+  if (duplicate) { await showAlert({ title: 'Duplicate asset number', message: 'That asset tracking number is already in use.' }); return }
+  await fixedAssetRepository.save(record)
   tab.value = isDepreciated(record) ? 'depreciated' : 'active'
   notice.value = `${record.description} saved.`
 }
-function deleteRecord(record: FixedAssetRecord) {
-  if (!window.confirm(`Delete ${record.description}?`)) return
-  fixedAssets.value = fixedAssets.value.filter((item) => item.id !== record.id)
+async function deleteRecord(record: FixedAssetRecord) {
+  if (!await confirmAction({ title: 'Delete fixed asset?', message: `${record.description} will be removed from this preview.`, confirmLabel: 'Delete', destructive: true })) return
+  await fixedAssetRepository.remove(record.id)
   editorOpen.value = false
   notice.value = `${record.description} deleted.`
 }

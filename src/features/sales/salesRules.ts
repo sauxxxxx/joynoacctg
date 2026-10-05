@@ -50,9 +50,9 @@ export function paymentSchedule(term: TermSchedule, invoiceDate: string): Instal
 
 export interface ReceivableInstallment extends Installment {
   count: number
-  amount: number
-  paid: number
-  balance: number
+  amountCents: number
+  paidCents: number
+  balanceCents: number
 }
 
 /**
@@ -62,23 +62,23 @@ export interface ReceivableInstallment extends Installment {
  * Without a term the whole invoice is one installment due on `fallbackDueDate`.
  */
 export function receivableInstallments(
-  invoiceTotal: number,
+  invoiceTotalCents: number,
   invoiceDate: string,
   term: TermSchedule | undefined,
-  collected: number,
+  collectedCents: number,
   fallbackDueDate = '',
 ): ReceivableInstallment[] {
   const schedule = term ? paymentSchedule(term, invoiceDate) : []
   const dates = schedule.length ? schedule : fallbackDueDate ? [{ number: 1, dueDate: fallbackDueDate }] : []
   if (!dates.length) return []
-  const totalCentavos = Math.round(Math.max(0, invoiceTotal) * 100)
+  const totalCentavos = Math.max(0, Math.trunc(invoiceTotalCents))
   const share = Math.floor(totalCentavos / dates.length)
-  let remainingCollected = Math.round(Math.max(0, collected) * 100)
+  let remainingCollected = Math.max(0, Math.trunc(collectedCents))
   return dates.map((item, index) => {
     const amount = index === dates.length - 1 ? totalCentavos - share * index : share
     const paid = Math.min(amount, remainingCollected)
     remainingCollected -= paid
-    return { ...item, count: dates.length, amount: amount / 100, paid: paid / 100, balance: (amount - paid) / 100 }
+    return { ...item, count: dates.length, amountCents: amount, paidCents: paid, balanceCents: amount - paid }
   })
 }
 
@@ -86,25 +86,48 @@ export function frequencyLabel(term: Pick<SetupRecord, 'payments' | 'frequencyEv
   return term.payments > 1 && term.frequencyUnit && term.frequencyEvery > 0 ? `Every ${term.frequencyEvery} ${term.frequencyUnit.toLocaleLowerCase()}` : ''
 }
 
-export function lineAmount(line: Pick<SalesLineItem, 'quantity' | 'unitPrice'>): number {
-  return Math.round((Number(line.quantity) || 0) * (Number(line.unitPrice) || 0) * 100) / 100
+export function lineAmountCents(line: Pick<SalesLineItem, 'quantity' | 'unitPriceCents'>): number {
+  return Math.round((Number(line.quantity) || 0) * (Number(line.unitPriceCents) || 0))
+}
+
+export interface SalesFinancialLine {
+  quantity: number
+  unitPriceCents: number
+  withholdingTaxCents: number
+  vatCents: number
+  creditableVatCents: number
+}
+
+export function summarizeSalesLines(lines: SalesFinancialLine[]) {
+  return lines.reduce((sum, line) => ({
+    quantity: sum.quantity + (Number(line.quantity) || 0),
+    withholdingCents: sum.withholdingCents + Math.trunc(Number(line.withholdingTaxCents) || 0),
+    vatCents: sum.vatCents + Math.trunc(Number(line.vatCents) || 0),
+    creditableVatCents: sum.creditableVatCents + Math.trunc(Number(line.creditableVatCents) || 0),
+    amountCents: sum.amountCents + lineAmountCents(line),
+  }), { quantity: 0, withholdingCents: 0, vatCents: 0, creditableVatCents: 0, amountCents: 0 })
+}
+
+export function calculateDiscountCents(subtotalCents: number, computation: 'Amount' | 'Percentage', value: number): number {
+  const raw = computation === 'Percentage' ? Math.round(subtotalCents * value / 100) : Math.trunc(value)
+  return Math.min(Math.max(0, Math.trunc(subtotalCents)), Math.max(0, raw))
 }
 
 /** Sum of posted receipt rows that pay this invoice, optionally only receipts dated on or before `asOf`. */
-export function postedReceiptsTotal(documents: SalesDocument[], invoiceId: string, asOf?: string): number {
+export function postedReceiptsTotalCents(documents: SalesDocument[], invoiceId: string, asOf?: string): number {
   return documents
     .filter((item) => item.kind === 'sales-receipts' && item.status === 'Posted' && (!asOf || item.date <= asOf))
     .flatMap((item) => item.payments)
     .filter((row) => row.invoiceId === invoiceId)
-    .reduce((sum, row) => sum + (Number(row.amount) || 0), 0)
+    .reduce((sum, row) => sum + (Number(row.amountCents) || 0), 0)
 }
 
-export function invoiceBalance(documents: SalesDocument[], invoice: SalesDocument): number {
-  return Math.round(Math.max(0, invoice.amount - postedReceiptsTotal(documents, invoice.id)) * 100) / 100
+export function invoiceBalanceCents(documents: SalesDocument[], invoice: SalesDocument): number {
+  return Math.max(0, invoice.amountCents - postedReceiptsTotalCents(documents, invoice.id))
 }
 
 /** Status shown for an invoice. Draft and Cancelled are kept; issued invoices are Paid or Unpaid by collections. */
 export function invoiceStatus(invoice: SalesDocument, documents: SalesDocument[]): SalesDocument['status'] {
   if (invoice.status === 'Draft' || invoice.status === 'Cancelled') return invoice.status
-  return invoice.amount > 0 && invoiceBalance(documents, invoice) === 0 ? 'Paid' : 'Unpaid'
+  return invoice.amountCents > 0 && invoiceBalanceCents(documents, invoice) === 0 ? 'Paid' : 'Unpaid'
 }

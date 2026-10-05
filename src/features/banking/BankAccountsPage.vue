@@ -1,8 +1,15 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { LayoutGrid, ListFilter, Plus, Search } from '@lucide/vue'
+import AppLoadState from '../../components/ui/AppLoadState.vue'
+import AppPagination from '../../components/ui/AppPagination.vue'
+import { useRepositoryList } from '../../lib/useRepositoryList'
+import { errorMessage } from '../../services/api/errors'
+import { useCollections } from '../../services/collectionStore'
+import { confirmAction, showAlert } from '../../services/dialogService'
+import { accountName, accountStore } from '../accounting/setup/accountSetupData'
 import BankAccountEditor from './BankAccountEditor.vue'
-import { bankAccounts, type BankAccountRecord } from './bankingData'
+import { bankAccountStore, type BankAccountRecord } from './bankingData'
 import './banking.css'
 
 const query = ref('')
@@ -11,25 +18,26 @@ const compact = ref(false)
 const editorOpen = ref(false)
 const editing = ref<BankAccountRecord | null>(null)
 const notice = ref('')
-const visibleRows = computed(() => {
-  const term = query.value.trim().toLocaleLowerCase()
-  return bankAccounts.value.filter((item) => (!activeOnly.value || item.active) && (!term || [item.name, item.bank, item.accountNumber, item.ledgerAccount].some((value) => value.toLocaleLowerCase().includes(term))))
-})
+useCollections(accountStore)
+const list = useRepositoryList(bankAccountStore.repository, () => ({ search: query.value, filters: { active: activeOnly.value || undefined } }))
 
 function openEditor(record: BankAccountRecord | null = null) { editing.value = record; editorOpen.value = true; notice.value = '' }
-function saveRecord(record: BankAccountRecord) {
-  const duplicate = bankAccounts.value.some((item) => item.id !== record.id && item.accountNumber && item.accountNumber === record.accountNumber)
-  if (duplicate) { window.alert('That account number is already in use.'); return }
-  const index = bankAccounts.value.findIndex((item) => item.id === record.id)
-  if (index >= 0) bankAccounts.value.splice(index, 1, record)
-  else bankAccounts.value.push(record)
-  notice.value = `${record.name} saved.`
+async function saveRecord(record: BankAccountRecord) {
+  const saved = await bankAccountStore.save(record)
+  notice.value = `${saved.name} saved.`
+  void list.reload()
 }
-function deleteRecord(record: BankAccountRecord) {
-  if (!window.confirm(`Delete ${record.name}?`)) return
-  bankAccounts.value = bankAccounts.value.filter((item) => item.id !== record.id)
+async function deleteRecord(record: BankAccountRecord) {
+  if (!await confirmAction({ title: 'Delete bank account?', message: `${record.name} will be deleted.`, confirmLabel: 'Delete', destructive: true })) return
+  try {
+    await bankAccountStore.remove(record.id, record.version)
+  } catch (error) {
+    await showAlert({ title: 'Bank account not deleted', message: errorMessage(error) })
+    return
+  }
   editorOpen.value = false
   notice.value = `${record.name} deleted.`
+  void list.reload()
 }
 </script>
 
@@ -48,11 +56,12 @@ function deleteRecord(record: BankAccountRecord) {
     <div class="banking-table-wrap" :class="{ 'banking-table-wrap--compact': compact }">
       <table class="banking-table banking-table--accounts">
         <thead><tr><th>Name</th><th>Bank</th><th>Account number</th><th>Account</th><th class="banking-table__center">Active?</th></tr></thead>
-        <tbody><tr v-for="item in visibleRows" :key="item.id" @click="openEditor(item)"><td><button type="button" class="banking-table__link" @click.stop="openEditor(item)">{{ item.name }}</button></td><td>{{ item.bank || '—' }}</td><td>{{ item.accountNumber || '—' }}</td><td>{{ item.ledgerAccount }}</td><td class="banking-table__center"><input type="checkbox" :checked="item.active" disabled /></td></tr></tbody>
+        <tbody v-if="list.status.value === 'ready'"><tr v-for="item in list.items.value" :key="item.id" @click="openEditor(item)"><td><button type="button" class="banking-table__link" @click.stop="openEditor(item)">{{ item.name }}</button></td><td>{{ item.bank || '—' }}</td><td>{{ item.accountNumber || '—' }}</td><td>{{ accountName(item.ledgerAccountId) }}</td><td class="banking-table__center"><input type="checkbox" :checked="item.active" disabled /></td></tr></tbody>
       </table>
-      <div v-if="!visibleRows.length" class="banking-empty"><strong>{{ bankAccounts.length ? 'No matching accounts' : 'No bank accounts yet' }}</strong><p>{{ bankAccounts.length ? 'Try another search or clear the active filter.' : 'Add an account to start recording bank activity.' }}</p><button v-if="!bankAccounts.length" class="banking-button" type="button" @click="openEditor()">Add bank account</button></div>
-      <footer><span>{{ visibleRows.length }} {{ visibleRows.length === 1 ? 'account' : 'accounts' }}</span></footer>
+      <AppLoadState :status="list.status.value" :error="list.error.value" label="bank accounts" @retry="list.reload" />
+      <div v-if="list.status.value === 'ready' && !list.items.value.length" class="banking-empty"><strong>{{ query || activeOnly ? 'No matching accounts' : 'No bank accounts yet' }}</strong><p>{{ query || activeOnly ? 'Try another search or clear the active filter.' : 'Add an account to start recording bank activity.' }}</p><button v-if="!query && !activeOnly" class="banking-button" type="button" @click="openEditor()">Add bank account</button></div>
+      <AppPagination v-model:page="list.page.value" :page-size="list.pageSize" :total="list.totalItems.value" label="bank accounts" />
     </div>
-    <BankAccountEditor :open="editorOpen" :record="editing" @close="editorOpen = false" @save="saveRecord" @delete="deleteRecord" />
+    <BankAccountEditor :open="editorOpen" :record="editing" :save="saveRecord" @close="editorOpen = false" @delete="deleteRecord" />
   </section>
 </template>

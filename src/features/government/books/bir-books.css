@@ -1,0 +1,7 @@
+.bir-books__filter { position: relative; }
+.bir-books__filter-panel { position: absolute; z-index: 35; top: calc(100% + 8px); left: 0; width: 300px; display: flex; flex-direction: column; gap: 14px; padding: 17px; border: 1px solid #d5dce0; border-radius: 8px; background: #fff; box-shadow: 0 14px 32px rgba(24, 34, 42, .16); }
+.bir-books__table { min-width: 980px; }
+.bir-books__table th button { display: inline-flex; align-items: center; gap: 5px; padding: 0; border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; }
+.bir-books__table th.ws-num button { margin-inline-start: auto; }
+.bir-books__pagination { display: flex; align-items: center; gap: 10px; }
+.bir-books__pagination > span { min-width: 92px; text-align: center; }

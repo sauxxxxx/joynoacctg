@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { Trash2, X } from '@lucide/vue'
+import AppSelect from '../../../components/ui/AppSelect.vue'
+import { accounts } from '../../accounting/setup/accountSetupData'
 import { emptyPurchaseSetupRecord, type PurchaseSetupKind, type PurchaseSetupRecord } from './purchaseSetupData'
 
 const props = defineProps<{ open: boolean; kind: PurchaseSetupKind; record: PurchaseSetupRecord | null }>()
@@ -17,6 +19,10 @@ const singular = () => ({
   'purchases-payment-terms': 'payment term',
   'purchases-payment-methods': 'payment method',
 })[props.kind]
+const accountOptions = computed(() => accounts.value.filter((account) => account.active || account.code === draft.value.accountId)
+  .map((account) => ({ value: account.code, label: `${account.code} · ${account.name}` })))
+const dueUnitOptions = ['Days', 'Months'].map((value) => ({ value, label: value }))
+const computationOptions = ['Amount', 'Percentage'].map((value) => ({ value, label: value }))
 
 watch(() => [props.open, props.record, props.kind] as const, async ([open]) => {
   draft.value = props.record ? { ...props.record } : emptyPurchaseSetupRecord(props.kind)
@@ -52,14 +58,14 @@ function save() {
           <label># of Payments<input v-model.number="draft.payments" type="number" min="1" step="1" /></label>
           <label>Payment Frequency<input v-model="draft.frequency" maxlength="60" placeholder="e.g. Months" /></label>
           <label>Due On<input v-model.number="draft.dueOn" type="number" min="0" step="1" /></label>
-          <label>Payment Due<select v-model="draft.paymentDue"><option>Days</option><option>Months</option></select></label>
+          <AppSelect v-model="draft.paymentDue" label="Payment Due" :options="dueUnitOptions" />
         </template>
         <template v-if="isDiscount()">
-          <label>Computation<select v-model="draft.computation"><option>Amount</option><option>Percentage</option></select></label>
+          <AppSelect v-model="draft.computation" label="Computation" :options="computationOptions" />
           <label>Rate<input v-model.number="draft.rate" type="number" min="0" step="0.01" /></label>
           <label class="purchase-setup-editor__check"><input v-model="draft.allowOverride" type="checkbox" /> Allow override</label>
         </template>
-        <label v-if="kind !== 'vendors'">Account<input v-model="draft.account" maxlength="120" /></label>
+        <AppSelect v-if="kind !== 'vendors'" v-model="draft.accountId" label="Account" :options="accountOptions" placeholder="Choose account" />
         <label v-if="kind === 'revolving-fund-customers' || isTerms()" class="purchase-setup-editor__check"><input v-model="draft.active" type="checkbox" /> Active</label>
         <p v-if="error" class="purchase-setup-editor__error" role="alert">{{ error }}</p>
       </div>

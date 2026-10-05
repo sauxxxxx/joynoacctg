@@ -2,6 +2,7 @@
 import { nextTick, ref, watch } from 'vue'
 import { X } from '@lucide/vue'
 import AppDatePicker from '../../../components/ui/AppDatePicker.vue'
+import AppSelect from '../../../components/ui/AppSelect.vue'
 import { parseMoneyToCents } from '../../../lib/money'
 import type { TaxCertificateId, TaxCertificateRecord } from './taxCertificateData'
 
@@ -17,6 +18,7 @@ const toDate = ref('')
 const tin = ref('')
 const signedFile = ref('')
 const error = ref('')
+const sourceOptions = ['Purchase receipts', 'Purchase invoices', 'Sales receipts', 'Other'].map((value) => ({ value, label: value }))
 
 watch(() => props.open, async (open) => {
   if (open) { source.value = 'Purchase receipts'; party.value = ''; amount.value = '0.00'; date.value = ''; fromDate.value = ''; toDate.value = ''; tin.value = ''; signedFile.value = ''; error.value = '' }
@@ -45,7 +47,7 @@ function save() {
     <form @submit.prevent="save">
       <header><div><h2>Create {{ formId.replace('form-', '') }} manually</h2><p>Create a draft certificate for later review and signing.</p></div><button type="button" aria-label="Close form" @click="dialog?.close()"><X :size="18" /></button></header>
       <div class="tax-entry-editor__fields">
-        <label>Source <span>*</span><select v-model="source"><option>Purchase receipts</option><option>Purchase invoices</option><option>Sales receipts</option><option>Other</option></select></label>
+        <AppSelect v-model="source" label="Source" required :options="sourceOptions" />
         <label>Vendor/Customer <span>*</span><input v-model="party" maxlength="140" /></label>
         <label>Amount <span>*</span><input v-model="amount" inputmode="decimal" placeholder="0.00" /></label>
         <AppDatePicker v-model="date" label="Date" required :invalid="Boolean(error && !date)" />

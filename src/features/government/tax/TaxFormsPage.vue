@@ -2,6 +2,8 @@
 import { computed, ref, watch } from 'vue'
 import { LayoutGrid, ListFilter, Minus, Plus, Search } from '@lucide/vue'
 import { formatMoney } from '../../../lib/money'
+import { confirmAction } from '../../../services/dialogService'
+import { taxFormRepository } from '../../../services/previewRepositories'
 import TaxEntryEditor from './TaxEntryEditor.vue'
 import { taxFormConfigs, taxFormRecords, type TaxFormId, type TaxFormRecord } from './taxFormData'
 import './taxForms.css'
@@ -33,17 +35,15 @@ function loadYear() {
   notice.value = `Loaded ${year}.`
 }
 function openEditor(record: TaxFormRecord | null = null) { editing.value = record; editorOpen.value = true; notice.value = '' }
-function saveRecord(record: TaxFormRecord) {
-  const index = taxFormRecords.value.findIndex((item) => item.id === record.id)
-  if (index >= 0) taxFormRecords.value.splice(index, 1, record)
-  else taxFormRecords.value.push(record)
+async function saveRecord(record: TaxFormRecord) {
+  await taxFormRepository.save(record)
   selectedId.value = record.id
   notice.value = `${config.value.title} ${record.period} saved.`
 }
-function removeSelected() {
+async function removeSelected() {
   const record = taxFormRecords.value.find((item) => item.id === selectedId.value)
-  if (!record || !window.confirm(`Delete the ${record.period} ${config.value.title} entry?`)) return
-  taxFormRecords.value = taxFormRecords.value.filter((item) => item.id !== record.id)
+  if (!record || !await confirmAction({ title: 'Delete tax entry?', message: `The ${record.period} ${config.value.title} entry will be removed.`, confirmLabel: 'Delete', destructive: true })) return
+  await taxFormRepository.remove(record.id)
   selectedId.value = ''
   notice.value = `${record.period} entry deleted.`
 }

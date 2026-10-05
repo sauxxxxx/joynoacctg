@@ -2,6 +2,10 @@
 import { computed, ref } from 'vue'
 import { Download, Plus, Search, Trash2, Upload, X } from '@lucide/vue'
 import AppDatePicker from '../../components/ui/AppDatePicker.vue'
+import AppSelect from '../../components/ui/AppSelect.vue'
+import { decimalToCents } from '../../lib/money'
+import { salesDocumentRepository } from '../../services/previewRepositories'
+import { goods, otherItems, services } from '../company/companyStore'
 import { customers } from './customers/customerPreviewStore'
 import { downloadInvoiceSheet, readInvoiceSheet } from './invoiceSpreadsheet'
 import { salesDocuments, setupRecords, type SalesDocument, type SalesLineItem } from './salesPreviewStore'
@@ -24,6 +28,9 @@ const error = ref('')
 const busy = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const terms = computed(() => setupRecords.value.filter((item) => item.kind === 'sales-payment-terms' && item.active))
+const catalog = computed(() => [...goods.value, ...services.value, ...otherItems.value])
+const customerOptions = computed(() => customers.value.filter((customer) => customer.active).map((customer) => ({ value: customer.id, label: customer.name })))
+const termOptions = computed(() => [{ value: '', label: 'None' }, ...terms.value.map((term) => ({ value: term.id, label: term.name }))])
 const visibleRows = computed(() => rows.value.filter((row) => `${row.number} ${row.item} ${customers.value.find((item) => item.id === row.customerId)?.name ?? ''}`.toLocaleLowerCase().includes(query.value.trim().toLocaleLowerCase())))
 
 function addRow() { rows.value.push(emptyRow()); error.value = '' }
@@ -40,22 +47,23 @@ function validateRows() {
   }
   return ''
 }
-function saveAll() {
+async function saveAll() {
   if (!rows.value.length) { error.value = 'Add at least one invoice.'; return }
   error.value = validateRows()
   if (error.value) return
   const documents: SalesDocument[] = rows.value.map((row) => {
     const customer = customers.value.find((item) => item.id === row.customerId)
-    const line: SalesLineItem = { id: crypto.randomUUID(), description: row.item.trim(), quantity: Number(row.quantity), unitPrice: Number(row.unitPrice), withholdingTaxCode: '', withholdingTaxAmount: 0, vatCode: '', vatType: '', vatAmount: 0, creditableVatAmount: 0 }
+    const itemId = catalog.value.find((item) => item.name.toLocaleLowerCase() === row.item.trim().toLocaleLowerCase())?.id ?? ''
+    const line: SalesLineItem = { id: crypto.randomUUID(), itemId, description: row.item.trim(), quantity: Number(row.quantity), unitPriceCents: decimalToCents(row.unitPrice) ?? 0, withholdingTaxCode: '', withholdingTaxCents: 0, vatCode: '', vatType: '', vatCents: 0, creditableVatCents: 0 }
     return {
       id: crypto.randomUUID(), kind: 'sales-invoices', number: row.number.trim(), date: row.date, customerId: row.customerId,
       status: 'Draft', paymentTermId: row.paymentTermId, paymentMethodId: '', dueDate: '',
-      amount: Math.round(line.quantity * line.unitPrice * 100) / 100, remarks: '',
+      amountCents: Math.round(line.quantity * line.unitPriceCents), remarks: '',
       customerDetails: { customerType: customer?.customerType ?? 'Company', company: customer?.name ?? '', tin: customer?.tin ?? '', street: customer?.unitBuilding ?? '', locality: customer?.locality ?? '', country: customer?.country || 'Philippines', zipCode: customer?.zipCode ?? '' },
-      discountTypeId: '', discountRate: 0, lines: [line], payments: [], withInvoice: false,
+      discountTypeId: '', discountRate: 0, discountAmountCents: 0, lines: [line], payments: [], withInvoice: false,
     }
   })
-  salesDocuments.value = [...salesDocuments.value, ...documents]
+  await Promise.all(documents.map((document) => salesDocumentRepository.save(document)))
   emit('saved', documents.length)
 }
 
@@ -117,8 +125,8 @@ async function importExcel(event: Event) {
           <tbody><tr v-for="row in visibleRows" :key="row.id">
             <td><input v-model="row.number" aria-label="Invoice number" maxlength="40" /></td>
             <td><AppDatePicker :id="`bulk-date-${row.id}`" v-model="row.date" label="Invoice date" /></td>
-            <td><select v-model="row.customerId" aria-label="Customer"><option value="">Select customer</option><option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select></td>
-            <td><select v-model="row.paymentTermId" aria-label="Payment term"><option value="">None</option><option v-for="term in terms" :key="term.id" :value="term.id">{{ term.name }}</option></select></td>
+            <td><AppSelect v-model="row.customerId" aria-label="Customer" placeholder="Select customer" :options="customerOptions" compact /></td>
+            <td><AppSelect v-model="row.paymentTermId" aria-label="Payment term" :options="termOptions" compact /></td>
             <td><input v-model="row.item" aria-label="Item" maxlength="160" /></td>
             <td><input v-model.number="row.quantity" aria-label="Quantity" type="number" min="0.01" step="0.01" /></td>
             <td><input v-model.number="row.unitPrice" aria-label="Unit price" type="number" min="0" step="0.01" /></td>

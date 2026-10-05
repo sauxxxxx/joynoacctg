@@ -4,6 +4,7 @@ import { ArrowRight, Eye, EyeOff, LoaderCircle, LockKeyhole, UserRound } from '@
 import BrandLogo from '../../components/BrandLogo.vue'
 import type { AuthCredentials } from './authTypes'
 import { previewCredentials } from './mockAuthService'
+import { isPreviewMode } from '../../services/api/config'
 import './auth.css'
 
 const props = defineProps<{ loading: boolean; error: string }>()
@@ -31,6 +32,7 @@ const capsLockOn = ref(false)
 const localError = ref('')
 const recoveryNotice = ref(false)
 const passwordInput = ref<HTMLInputElement | null>(null)
+const usernameInput = ref<HTMLInputElement | null>(null)
 const visibleError = computed(() => localError.value || props.error)
 
 function clearMessages() {
@@ -50,14 +52,15 @@ function fillPreviewAccount() {
   nextTick(() => passwordInput.value?.focus())
 }
 
-function submit() {
+async function submit() {
   clearMessages()
-  if (!username.value.trim()) {
-    localError.value = 'Enter your username.'
-    return
-  }
-  if (!password.value) {
-    localError.value = 'Enter your password.'
+  const { authCredentialsSchema } = await import('../../validation/schemas')
+  const result = authCredentialsSchema.safeParse({ username: username.value, password: password.value })
+  if (!result.success) {
+    localError.value = result.error.issues[0]?.message ?? 'Check your sign-in details.'
+    await nextTick()
+    if (!username.value.trim()) usernameInput.value?.focus()
+    else passwordInput.value?.focus()
     return
   }
   try {
@@ -66,7 +69,7 @@ function submit() {
   } catch {
     // Remembering the username is optional; authentication can continue without browser storage.
   }
-  emit('signIn', { username: username.value, password: password.value })
+  emit('signIn', result.data)
 }
 </script>
 
@@ -76,7 +79,7 @@ function submit() {
       <section class="login-visual" aria-labelledby="login-context-title">
         <BrandLogo class="login-visual__brand" />
         <div class="login-visual__art" aria-hidden="true">
-          <img src="/login-illustration.png" alt="" />
+          <img src="/login-illustration.webp" alt="" width="1536" height="1024" decoding="async" fetchpriority="low" />
         </div>
         <div class="login-visual__copy">
           <h2 id="login-context-title">Accounting without the clutter.</h2>
@@ -98,7 +101,7 @@ function submit() {
               <span>Username or email</span>
               <span class="login-input">
                 <UserRound :size="17" aria-hidden="true" />
-                <input v-model="username" name="username" autocomplete="username" placeholder="Enter your username" :aria-invalid="Boolean(visibleError)" @input="clearMessages" />
+                <input ref="usernameInput" v-model="username" name="username" autocomplete="username" placeholder="Enter your username" :aria-invalid="Boolean(visibleError)" :aria-describedby="visibleError ? 'login-error' : undefined" @input="clearMessages" />
               </span>
             </label>
 
@@ -106,7 +109,7 @@ function submit() {
               <span>Password</span>
               <span class="login-input login-password">
                 <LockKeyhole :size="17" aria-hidden="true" />
-                <input ref="passwordInput" v-model="password" name="password" :type="passwordVisible ? 'text' : 'password'" autocomplete="current-password" placeholder="Enter your password" :aria-invalid="Boolean(visibleError)" @input="clearMessages" @keydown="updateCapsLock" @keyup="updateCapsLock" @blur="capsLockOn = false" />
+                <input ref="passwordInput" v-model="password" name="password" :type="passwordVisible ? 'text' : 'password'" autocomplete="current-password" placeholder="Enter your password" :aria-invalid="Boolean(visibleError)" :aria-describedby="visibleError ? 'login-error' : undefined" @input="clearMessages" @keydown="updateCapsLock" @keyup="updateCapsLock" @blur="capsLockOn = false" />
                 <button type="button" :aria-label="passwordVisible ? 'Hide password' : 'Show password'" @click="passwordVisible = !passwordVisible">
                   <EyeOff v-if="passwordVisible" :size="17" aria-hidden="true" />
                   <Eye v-else :size="17" aria-hidden="true" />
@@ -120,7 +123,7 @@ function submit() {
             </div>
 
             <p v-if="capsLockOn" class="login-caps" role="status">Caps Lock is on</p>
-            <p v-if="visibleError" class="login-message login-message--error" role="alert">{{ visibleError }}</p>
+            <p v-if="visibleError" id="login-error" class="login-message login-message--error" role="alert">{{ visibleError }}</p>
             <p v-else-if="recoveryNotice" class="login-message" role="status">Contact your system administrator to reset your password.</p>
 
             <button class="login-submit" type="submit" :disabled="loading">
@@ -130,7 +133,7 @@ function submit() {
             </button>
           </form>
 
-          <div class="login-preview-account">
+          <div v-if="isPreviewMode" class="login-preview-account">
             <span>Preview access</span>
             <p><strong>{{ previewCredentials.username }}</strong> / {{ previewCredentials.password }}</p>
             <button type="button" @click="fillPreviewAccount">Use preview account</button>

@@ -15,7 +15,7 @@ const dialog = ref<HTMLDialogElement | null>(null)
 const error = ref('')
 const activeAccounts = computed(() => accounts.value.filter((account) => account.active))
 const accountOptions = computed<SelectOption[]>(() => activeAccounts.value.map((account) => ({
-  value: account.name,
+  value: account.code,
   label: `${account.code} · ${account.name}`,
 })))
 const journalTypeOptions: SelectOption[] = [
@@ -26,7 +26,7 @@ const journalTypeOptions: SelectOption[] = [
 ]
 
 function blankLine() {
-  return { accountName: '', debit: '', credit: '', remarks: '' }
+  return { accountId: '', debit: '', credit: '', remarks: '' }
 }
 
 function blankDraft(): JournalDraftInput {
@@ -53,7 +53,7 @@ watch(() => [props.open, props.entry, props.nextJournalNumber] as const, async (
     date: props.entry.date,
     remarks: props.entry.remarks,
     lines: props.entry.lines.map((line) => ({
-      accountName: line.accountName,
+      accountId: line.accountId,
       debit: line.debitCents ? formatJournalAmount(line.debitCents).replaceAll(',', '') : '',
       credit: line.creditCents ? formatJournalAmount(line.creditCents).replaceAll(',', '') : '',
       remarks: line.remarks ?? '',
@@ -96,7 +96,7 @@ function onBackdropClick(event: MouseEvent) {
         <div class="journal-editor__lines-heading"><h3>Debit and credit lines</h3><span>Enter one side per line</span></div>
         <div class="journal-editor__lines">
           <div v-for="(line, index) in draft.lines" :key="index" class="journal-editor__line">
-            <AppSelect :id="`general-journal-account-${index}`" v-model="line.accountName" label="Account" required placeholder="Choose account" :options="accountOptions" :invalid="Boolean(error && !line.accountName)" />
+            <AppSelect :id="`general-journal-account-${index}`" v-model="line.accountId" label="Account" required placeholder="Choose account" :options="accountOptions" :invalid="Boolean(error && !line.accountId)" />
             <label>Debit<input v-model="line.debit" type="text" inputmode="decimal" placeholder="0.00" /></label>
             <label>Credit<input v-model="line.credit" type="text" inputmode="decimal" placeholder="0.00" /></label>
             <label>Remarks<input v-model="line.remarks" type="text" maxlength="160" placeholder="Optional line note" /></label>

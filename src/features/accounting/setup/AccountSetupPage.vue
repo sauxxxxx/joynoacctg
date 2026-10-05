@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { ChevronDown, ChevronRight, LayoutGrid, ListFilter, Plus, Search } from '@lucide/vue'
+import { confirmAction, showAlert } from '../../../services/dialogService'
+import { errorMessage } from '../../../services/api/errors'
+import { useCollections } from '../../../services/collectionStore'
 import AccountSetupEditor from './AccountSetupEditor.vue'
-import { accounts, categories, categoryName, type Account, type AccountCategory } from './accountSetupData'
+import { accountStore, categoryStore, accounts, categories, categoryName, type Account, type AccountCategory } from './accountSetupData'
 import './accountSetup.css'
 
 const props = defineProps<{ pageId: 'chart-of-accounts' | 'account-categories' }>()
+useCollections(accountStore, categoryStore)
 type Tab = 'accounts' | 'tree' | 'mapping'
 type TreeRow = { key: string; code: string; name: string; depth: number; group: boolean; expandable: boolean }
 const tab = ref<Tab>('accounts')
@@ -44,26 +48,24 @@ const treeRows = computed<TreeRow[]>(() => {
 })
 
 function openEditor(record: Account | AccountCategory | null = null) { editing.value = record; editorOpen.value = true }
-function saveAccount(record: Account) {
-  const index = accounts.value.findIndex((item) => item.code === record.code)
-  if (index >= 0) accounts.value.splice(index, 1, record)
-  else accounts.value.push(record)
+async function saveAccount(record: Account) {
+  try { await accountStore.save(record) }
+  catch (cause) { await showAlert({ title: 'Account not saved', message: errorMessage(cause, 'The account could not be saved.') }) }
 }
-function saveCategory(record: AccountCategory) {
-  const index = categories.value.findIndex((item) => item.code === record.code)
-  if (index >= 0) categories.value.splice(index, 1, record)
-  else categories.value.push(record)
+async function saveCategory(record: AccountCategory) {
+  try { await categoryStore.save(record) }
+  catch (cause) { await showAlert({ title: 'Category not saved', message: errorMessage(cause, 'The category could not be saved.') }) }
 }
-function removeRecord() {
+async function removeRecord() {
   const record = editing.value
   if (!record) return
   if (isCategories.value && (categories.value.some((item) => item.parentCode === record.code) || accounts.value.some((item) => item.parentCode === record.code))) {
-    window.alert('Move or remove child categories and accounts before deleting this category.')
+    await showAlert({ title: 'Category is in use', message: 'Move or remove child categories and accounts before deleting this category.' })
     return
   }
-  if (!window.confirm(`Delete ${record.code} · ${record.name} from this preview?`)) return
-  if (isCategories.value) categories.value = categories.value.filter((item) => item.code !== record.code)
-  else accounts.value = accounts.value.filter((item) => item.code !== record.code)
+  if (!await confirmAction({ title: 'Delete account record?', message: `${record.code} · ${record.name} will be removed from this preview.`, confirmLabel: 'Delete', destructive: true })) return
+  if (isCategories.value) await categoryStore.remove(record.id)
+  else await accountStore.remove(record.id)
   editorOpen.value = false
 }
 function toggleExpanded(code: string) { expanded.value = expanded.value.includes(code) ? expanded.value.filter((item) => item !== code) : [...expanded.value, code] }

@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import AppSelect from '../../components/ui/AppSelect.vue'
+import { getAgingBucket } from '../../lib/aging'
 import DateRangeFilter from '../workspace/DateRangeFilter.vue'
 import { customers } from './customers/customerPreviewStore'
 import { reportDate, tableAmount } from './salesFormat'
 import { salesDocuments, setupRecords } from './salesPreviewStore'
-import { postedReceiptsTotal, receivableInstallments } from './salesRules'
+import { postedReceiptsTotalCents, receivableInstallments } from './salesRules'
 import './sales-pages.css'
 
 type ReportId = 'receivable-schedule' | 'receivable-aging'
 type AgingBucket = 'current' | 'oneToThirty' | 'thirtyOneToSixty' | 'sixtyOneToNinety' | 'overNinety'
-type AgingRow = { customerId: string; name: string; balance: number } & Record<AgingBucket, number>
+type AgingRow = { customerId: string; name: string; balanceCents: number } & Record<AgingBucket, number>
 
 const props = defineProps<{ pageId: ReportId }>()
 const isAging = computed(() => props.pageId === 'receivable-aging')
@@ -22,7 +24,10 @@ const asOf = computed(() => asOfRange.value.to)
 const months = ref(3)
 const customerFilter = ref('')
 const monthsError = computed(() => !isAging.value && (!Number.isInteger(Number(months.value)) || months.value < 1 || months.value > 36) ? 'Enter 1 to 36 months.' : '')
-const utcDay = (date: string) => Date.parse(`${date}T00:00:00Z`) / 86_400_000
+const customerOptions = computed(() => [
+  { value: '', label: 'All customers' },
+  ...customers.value.map((customer) => ({ value: customer.id, label: customer.name })),
+])
 
 // One entry per unpaid installment. Only receipts dated on or before the report date reduce the balances.
 const balances = computed(() => {
@@ -32,10 +37,10 @@ const balances = computed(() => {
     .filter((item) => item.kind === 'sales-invoices' && item.status === 'Unpaid' && item.date <= reportDate)
     .flatMap((invoice) => {
       const term = setupRecords.value.find((record) => record.id === invoice.paymentTermId)
-      const collected = postedReceiptsTotal(salesDocuments.value, invoice.id, reportDate)
-      return receivableInstallments(invoice.amount, invoice.date, term, collected, invoice.dueDate)
-        .filter((installment) => installment.balance > 0)
-        .map((installment) => ({ invoice, installment, dueDate: installment.dueDate, balance: installment.balance }))
+      const collectedCents = postedReceiptsTotalCents(salesDocuments.value, invoice.id, reportDate)
+      return receivableInstallments(invoice.amountCents, invoice.date, term, collectedCents, invoice.dueDate)
+        .filter((installment) => installment.balanceCents > 0)
+        .map((installment) => ({ invoice, installment, dueDate: installment.dueDate, balanceCents: installment.balanceCents }))
     })
 })
 
@@ -48,45 +53,50 @@ const scheduleRows = computed(() => {
   return balances.value
     .filter(({ invoice, dueDate }) => (!customerFilter.value || invoice.customerId === customerFilter.value) && dueDate <= endDate)
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.invoice.number.localeCompare(b.invoice.number))
-    .map(({ invoice, installment, dueDate, balance }) => ({
+    .map(({ invoice, installment, dueDate, balanceCents }) => ({
       rowKey: `${invoice.id}:${installment.number}`,
       invoiceNumber: installment.count > 1 ? `${invoice.number} (${installment.number}/${installment.count})` : invoice.number,
       name: customers.value.find((customer) => customer.id === invoice.customerId)?.name ?? 'Unknown customer',
       dueDate,
-      balance,
+      balanceCents,
     }))
 })
 
 // One row per customer, as in the legacy AR Aging report. Each invoice balance falls in one bucket by days past due.
 const agingRows = computed<AgingRow[]>(() => {
   const rows = new Map<string, AgingRow>()
-  for (const { invoice, dueDate, balance } of balances.value) {
+  for (const { invoice, dueDate, balanceCents } of balances.value) {
     const row = rows.get(invoice.customerId) ?? {
       customerId: invoice.customerId,
       name: customers.value.find((customer) => customer.id === invoice.customerId)?.name ?? 'Unknown customer',
-      balance: 0, current: 0, oneToThirty: 0, thirtyOneToSixty: 0, sixtyOneToNinety: 0, overNinety: 0,
+      balanceCents: 0, current: 0, oneToThirty: 0, thirtyOneToSixty: 0, sixtyOneToNinety: 0, overNinety: 0,
     }
-    const overdueDays = utcDay(asOf.value) - utcDay(dueDate)
-    const bucket: AgingBucket = overdueDays <= 0 ? 'current' : overdueDays <= 30 ? 'oneToThirty' : overdueDays <= 60 ? 'thirtyOneToSixty' : overdueDays <= 90 ? 'sixtyOneToNinety' : 'overNinety'
-    row.balance += balance
-    row[bucket] += balance
+    const bucket: AgingBucket = ({
+      current: 'current',
+      '1-30': 'oneToThirty',
+      '31-60': 'thirtyOneToSixty',
+      '61-90': 'sixtyOneToNinety',
+      '90+': 'overNinety',
+    } as const)[getAgingBucket(dueDate, new Date(`${asOf.value}T00:00:00`))]
+    row.balanceCents += balanceCents
+    row[bucket] += balanceCents
     rows.set(invoice.customerId, row)
   }
   return [...rows.values()].sort((a, b) => a.name.localeCompare(b.name))
 })
-const agingColumns: { key: 'balance' | AgingBucket; label: string }[] = [
-  { key: 'balance', label: 'Balance' }, { key: 'current', label: 'Current' }, { key: 'oneToThirty', label: '1-30 Days' },
+const agingColumns: { key: 'balanceCents' | AgingBucket; label: string }[] = [
+  { key: 'balanceCents', label: 'Balance' }, { key: 'current', label: 'Current' }, { key: 'oneToThirty', label: '1-30 Days' },
   { key: 'thirtyOneToSixty', label: '31-60 Days' }, { key: 'sixtyOneToNinety', label: '61-90 Days' }, { key: 'overNinety', label: '91+ Days' },
 ]
 
 const totals = computed(() => agingRows.value.reduce((sum, row) => ({
-  balance: sum.balance + row.balance,
+  balanceCents: sum.balanceCents + row.balanceCents,
   current: sum.current + row.current,
   oneToThirty: sum.oneToThirty + row.oneToThirty,
   thirtyOneToSixty: sum.thirtyOneToSixty + row.thirtyOneToSixty,
   sixtyOneToNinety: sum.sixtyOneToNinety + row.sixtyOneToNinety,
   overNinety: sum.overNinety + row.overNinety,
-}), { balance: 0, current: 0, oneToThirty: 0, thirtyOneToSixty: 0, sixtyOneToNinety: 0, overNinety: 0 }))
+}), { balanceCents: 0, current: 0, oneToThirty: 0, thirtyOneToSixty: 0, sixtyOneToNinety: 0, overNinety: 0 }))
 </script>
 
 <template>
@@ -97,7 +107,7 @@ const totals = computed(() => agingRows.value.reduce((sum, row) => ({
         <div class="sales-panel__actions">
           <template v-if="!isAging">
             <label class="sales-inline-field">Month(s) <input v-model.number="months" type="number" min="1" max="36" step="1" required :aria-invalid="Boolean(monthsError)" /></label>
-            <select v-model="customerFilter" class="sales-status-filter" aria-label="Filter by customer"><option value="">All customers</option><option v-for="customer in customers" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select>
+            <AppSelect v-model="customerFilter" :options="customerOptions" aria-label="Filter by customer" compact />
           </template>
           <DateRangeFilter v-model="asOfRange" :default-value="defaultAsOf" mode="as-of" />
         </div>
@@ -118,9 +128,9 @@ const totals = computed(() => agingRows.value.reduce((sum, row) => ({
           <table class="sales-table sales-report__table sales-report__table--grid">
             <thead><tr><th scope="col">Customer</th><th scope="col">Invoice #</th><th scope="col">Due date</th><th scope="col" class="sales-table__number">Balance Due</th></tr></thead>
             <tbody>
-              <tr v-for="row in scheduleRows" :key="row.rowKey"><td>{{ row.name }}</td><td>{{ row.invoiceNumber }}</td><td>{{ reportDate(row.dueDate) }}</td><td class="sales-table__number">{{ tableAmount(row.balance) }}</td></tr>
+              <tr v-for="row in scheduleRows" :key="row.rowKey"><td>{{ row.name }}</td><td>{{ row.invoiceNumber }}</td><td>{{ reportDate(row.dueDate) }}</td><td class="sales-table__number">{{ tableAmount(row.balanceCents) }}</td></tr>
             </tbody>
-            <tfoot><tr><th scope="row">Total</th><td /><td /><td class="sales-table__number">{{ tableAmount(scheduleRows.reduce((sum, row) => sum + row.balance, 0)) }}</td></tr></tfoot>
+            <tfoot><tr><th scope="row">Total</th><td /><td /><td class="sales-table__number">{{ tableAmount(scheduleRows.reduce((sum, row) => sum + row.balanceCents, 0)) }}</td></tr></tfoot>
           </table>
         </div>
       </div>

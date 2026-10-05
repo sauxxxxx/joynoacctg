@@ -2,6 +2,7 @@
 import { computed, nextTick, ref } from 'vue'
 import { Check, Info, Plus, Search, Trash2, X } from '@lucide/vue'
 import AppSelect from '../../components/ui/AppSelect.vue'
+import { createRefRepository } from '../../services/refRepository'
 import { recordAudit } from './companyStore'
 import RecordField from './RecordField.vue'
 import type { AnyRecord, FieldDef, RecordsConfig } from './recordConfig'
@@ -22,6 +23,7 @@ const formBody = ref<HTMLElement | null>(null)
 
 const title = computed(() => props.config.singular.charAt(0).toLocaleUpperCase() + props.config.singular.slice(1))
 const records = computed(() => props.config.store.value)
+const repository = computed(() => createRefRepository(`/company/${props.config.singular}`, props.config.store, { searchText: props.config.searchText }))
 const hasStatus = computed(() => props.config.fields.some((field) => field.key === 'active'))
 const statusOptions = [{ value: 'all', label: 'All statuses' }, { value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }]
 const visible = computed(() => {
@@ -37,7 +39,8 @@ const preview = computed(() => props.config.preview?.(draft.value) ?? null)
 // Records open by clicking their row, as in the legacy lists; deleting happens from the form.
 function openForm(record?: AnyRecord) {
   // Records are plain JSON data; this also unwraps Vue's reactive proxies.
-  draft.value = JSON.parse(JSON.stringify(record ?? { id: '', ...props.config.empty() }))
+  const stored = JSON.parse(JSON.stringify(record ?? { id: '', ...props.config.empty() }))
+  draft.value = props.config.toDraft?.(stored) ?? stored
   formError.value = ''
   formDialog.value?.showModal()
   nextTick(() => formBody.value?.querySelector<HTMLElement>('input, textarea, button')?.focus())
@@ -53,7 +56,7 @@ function normalized(record: AnyRecord): AnyRecord {
   return result
 }
 
-function save() {
+async function save() {
   const candidate = normalized(draft.value)
   const parsed = props.config.schema.safeParse(candidate)
   if (!parsed.success) {
@@ -67,8 +70,9 @@ function save() {
     return
   }
   const isNew = !candidate.id
-  const saved = { ...candidate, id: candidate.id || crypto.randomUUID() }
-  props.config.store.value = isNew ? [...records.value, saved] : records.value.map((record) => record.id === saved.id ? saved : record)
+  const domainRecord = props.config.fromDraft?.(candidate) ?? candidate
+  const saved = { ...domainRecord, id: candidate.id || crypto.randomUUID() }
+  await repository.value.save(saved)
   recordAudit(props.config.auditModule, isNew ? 'Created' : 'Updated', `${title.value}: ${props.config.label(saved)}`)
   notice.value = `${props.config.label(saved)} ${isNew ? 'added' : 'updated'}.`
   formDialog.value?.close()
@@ -87,10 +91,10 @@ function deleteFromForm() {
   deleteDialog.value?.showModal()
 }
 
-function confirmDelete() {
+async function confirmDelete() {
   const record = pendingDelete.value
   if (!record) return
-  props.config.store.value = records.value.filter((item) => item.id !== record.id)
+  await repository.value.remove(record.id)
   recordAudit(props.config.auditModule, 'Deleted', `${title.value}: ${props.config.label(record)}`)
   notice.value = `${props.config.label(record)} deleted.`
   deleteDialog.value?.close()

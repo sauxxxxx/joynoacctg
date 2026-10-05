@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { Download, FileText, Info, Plus, Search, Trash2, Upload, X } from '@lucide/vue'
 import AppSelect from '../../components/ui/AppSelect.vue'
+import { documentRepository } from '../../services/previewRepositories'
 import { recordAudit, storedDocuments, type StoredDocument } from './companyStore'
 import '../workspace/workspace.css'
 import './company.css'
@@ -59,7 +60,7 @@ function onDrop(event: DragEvent) {
   choose(event.dataTransfer?.files)
 }
 
-function save() {
+async function save() {
   if (!file.value) { error.value = 'Choose a file to upload.'; return }
   const name = draft.value.name.trim()
   if (!name) { error.value = 'Document name is required.'; return }
@@ -75,7 +76,7 @@ function save() {
     uploadedAt: new Date().toISOString(),
     url: URL.createObjectURL(file.value),
   }
-  storedDocuments.value = [document, ...storedDocuments.value]
+  await documentRepository.save(document)
   recordAudit('Documents', 'Created', `Document: ${name}`, `${document.fileName} · ${size(document.size)}`)
   notice.value = `${name} uploaded.`
   uploadDialog.value?.close()
@@ -86,11 +87,11 @@ function askDelete(document: StoredDocument) {
   deleteDialog.value?.showModal()
 }
 
-function confirmDelete() {
+async function confirmDelete() {
   const document = pendingDelete.value
   if (!document) return
   URL.revokeObjectURL(document.url)
-  storedDocuments.value = storedDocuments.value.filter((item) => item.id !== document.id)
+  await documentRepository.remove(document.id)
   recordAudit('Documents', 'Deleted', `Document: ${document.name}`, document.fileName)
   notice.value = `${document.name} deleted.`
   deleteDialog.value?.close()

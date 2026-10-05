@@ -9,7 +9,7 @@ import { defineRecords, sameText, text, toOptions, type AnyRecord, type FieldDef
 const required = (label: string) => z.string().trim().min(1, `${label} is required.`)
 const optionalEmail = z.union([z.literal(''), z.email('Enter a valid email address.')])
 const amountField = (label: string) => z.number(`${label} must be a number.`).finite().min(0, `${label} cannot be negative.`)
-const peso = (value: unknown) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(Number(value) || 0)
+const pesoFromCents = (value: unknown) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format((Number(value) || 0) / 100)
 const duplicate = (others: AnyRecord[], draft: AnyRecord, key: string) => others.some((record) => sameText(record[key], draft[key]))
 
 // ------------------------------------------------------------------ Owners
@@ -100,8 +100,8 @@ function itemConfig(kind: ItemKind, store: typeof goods, words: { singular: stri
     { key: 'description', label: 'Description', type: 'textarea', maxlength: 500 },
     { key: 'unit', label: words.unit, type: 'text', maxlength: 30, placeholder: words.unitHint },
     { key: 'category', label: 'Category', type: 'text', maxlength: 80 },
-    { key: 'sellingPrice', label: words.price, type: 'money' },
-    ...(words.showCost ? [{ key: 'cost', label: 'Cost', type: 'money' } as FieldDef] : []),
+    { key: 'sellingPriceCents', label: words.price, type: 'money' },
+    ...(words.showCost ? [{ key: 'costCents', label: 'Cost', type: 'money' } as FieldDef] : []),
     { key: 'active', label: 'Active', type: 'checkbox' },
   ]
   return defineRecords<CompanyItem>({
@@ -110,17 +110,19 @@ function itemConfig(kind: ItemKind, store: typeof goods, words: { singular: stri
     description: words.description,
     store,
     auditModule: 'Company',
-    empty: () => ({ kind, code: '', name: '', description: '', unit: '', sellingPrice: 0, cost: 0, category: '', active: true }),
+    empty: () => ({ kind, code: '', name: '', description: '', unit: '', sellingPriceCents: 0, costCents: 0, category: '', active: true }),
     fields,
     columns: [
       { label: 'Code', value: (r) => text(r, 'code') },
       { label: 'Name', value: (r) => text(r, 'name'), sub: (r) => String(r.category ?? ''), strong: true },
       { label: words.unit, value: (r) => text(r, 'unit') },
-      { label: words.price, value: (r) => peso(r.sellingPrice), numeric: true },
-      ...(words.showCost ? [{ label: 'Cost', value: (r: AnyRecord) => peso(r.cost), numeric: true }] : []),
+      { label: words.price, value: (r) => pesoFromCents(r.sellingPriceCents), numeric: true },
+      ...(words.showCost ? [{ label: 'Cost', value: (r: AnyRecord) => pesoFromCents(r.costCents), numeric: true }] : []),
       { label: 'Active?', value: () => '', check: (r: AnyRecord) => Boolean(r.active) },
     ],
-    schema: z.object({ code: required('Code'), name: required('Name'), sellingPrice: amountField(words.price), cost: amountField('Cost') }),
+    schema: z.object({ code: required('Code'), name: required('Name'), sellingPriceCents: amountField(words.price), costCents: amountField('Cost') }),
+    toDraft: (record) => ({ ...record, sellingPriceCents: Number(record.sellingPriceCents) / 100, costCents: Number(record.costCents) / 100 }),
+    fromDraft: (draft) => ({ ...draft, sellingPriceCents: Math.round(Number(draft.sellingPriceCents) * 100), costCents: Math.round(Number(draft.costCents) * 100) }),
     validate: (draft, others) => duplicate(others, draft, 'code') ? 'This code is already in use.' : '',
     label: (r) => `${r.code} ${r.name}`,
     searchText: (r) => `${r.code} ${r.name} ${r.description} ${r.category}`,

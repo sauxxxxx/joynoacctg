@@ -9,3 +9,8 @@ export function parseMoneyToCents(input: string): number | null {
 export function formatMoney(cents: number): string {
   return (cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
+
+export function decimalToCents(value: number | string): number | null {
+  const normalized = typeof value === 'number' ? value.toFixed(2) : value
+  return parseMoneyToCents(normalized)
+}

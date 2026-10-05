@@ -14,6 +14,8 @@ const previewUser: AuthUser = {
   active: true,
 }
 
+const SESSION_DURATION = 8 * 60 * 60 * 1000
+
 function wait(milliseconds: number) {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds))
 }
@@ -26,6 +28,7 @@ export const mockAuthService: AuthService = {
       throw new AuthenticationError('The username or password is incorrect. Use the preview account shown below.')
     }
     if (!previewUser.active) throw new AuthenticationError('This account is inactive. Contact your system administrator.')
-    return { ...previewUser }
+    return { user: { ...previewUser }, expiresAt: Date.now() + SESSION_DURATION, accessToken: '', companyId: 'preview-company' }
   },
+  async signOut() {},
 }

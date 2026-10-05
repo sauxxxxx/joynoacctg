@@ -2,9 +2,11 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { Plus, Trash2, X } from '@lucide/vue'
 import AppDatePicker from '../../components/ui/AppDatePicker.vue'
+import AppSelect, { type SelectOption } from '../../components/ui/AppSelect.vue'
 import { formatMoney, parseMoneyToCents } from '../../lib/money'
 import { draftFromRecord, emptyPurchaseDraft, validatePurchaseDraft } from './purchaseForm'
 import { purchaseConfigs, type PurchaseKind, type PurchaseRecord } from './purchasePreviewData'
+import { purchaseSetupRecords } from './setup/purchaseSetupData'
 
 const props = defineProps<{ open: boolean; kind: PurchaseKind; record: PurchaseRecord | null }>()
 const emit = defineEmits<{ close: []; save: [record: PurchaseRecord]; delete: [record: PurchaseRecord] }>()
@@ -19,6 +21,9 @@ const singularNames: Record<PurchaseKind, string> = { 'purchase-invoices': 'invo
 const title = computed(() => `${posted.value ? 'View' : props.record ? 'Edit' : 'New'} ${singularNames[props.kind]}`)
 const invoiceSubtotal = computed(() => draft.value.lines.reduce((sum, line) => sum + (Number(line.quantity) || 0) * (parseMoneyToCents(line.unitPrice) ?? 0), 0))
 const invoiceTotal = computed(() => invoiceSubtotal.value + (parseMoneyToCents(draft.value.tax) ?? 0))
+const vendorOptions = computed<SelectOption[]>(() => purchaseSetupRecords.value
+  .filter((record) => record.kind === 'vendors' && record.active)
+  .map((record) => ({ value: record.id, label: record.name })))
 
 watch(() => [props.open, props.record, props.kind] as const, async () => {
   if (!props.open) { if (dialog.value?.open) dialog.value.close(); return }
@@ -46,7 +51,7 @@ function addLine() { draft.value.lines.push({ id: crypto.randomUUID(), descripti
         <div class="purchases-editor__fields">
           <label>{{ purchaseConfigs[kind].numberLabel }} <span aria-hidden="true">*</span><input v-model="draft.number" type="text" maxlength="80" :disabled="posted" required /></label>
           <AppDatePicker v-if="!payroll" v-model="draft.date" label="Date" required :disabled="posted" :invalid="Boolean(error)" />
-          <label v-if="!payroll">{{ receipt ? 'Vendor' : 'Vendor / Payee' }} <span aria-hidden="true">*</span><input v-model="draft.vendor" type="text" maxlength="120" :disabled="posted" required /></label>
+          <AppSelect v-if="!payroll" id="purchase-vendor" v-model="draft.vendorId" :label="receipt ? 'Vendor' : 'Vendor / Payee'" required placeholder="Choose vendor" :options="vendorOptions" :disabled="posted" :invalid="Boolean(error && !draft.vendorId)" />
           <template v-if="payroll">
             <label>Month <span aria-hidden="true">*</span><input v-model="draft.month" type="number" min="1" max="12" :disabled="posted" required /></label>
             <label>Year <span aria-hidden="true">*</span><input v-model="draft.year" type="number" min="2000" max="2100" :disabled="posted" required /></label>

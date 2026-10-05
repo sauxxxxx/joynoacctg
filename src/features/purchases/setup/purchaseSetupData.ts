@@ -8,7 +8,7 @@ export interface PurchaseSetupRecord {
   name: string
   tin: string
   address: string
-  account: string
+  accountId: string
   active: boolean
   computation: string
   rate: number
@@ -34,7 +34,7 @@ function record(kind: PurchaseSetupKind, name: string, values: Partial<PurchaseS
     name,
     tin: '',
     address: '',
-    account: '',
+    accountId: '',
     active: true,
     computation: 'Amount',
     rate: 0,
@@ -45,6 +45,10 @@ function record(kind: PurchaseSetupKind, name: string, values: Partial<PurchaseS
     paymentDue: 'Days',
     ...values,
   }
+}
+
+export function purchaseSetupRecordId(kind: PurchaseSetupKind, name: string) {
+  return `${kind}-${name.toLocaleLowerCase().replace(/[^a-z0-9]+/g, '-')}`
 }
 
 // Only values visible in the supplied reference screens are seeded here.
@@ -60,17 +64,23 @@ export const purchaseSetupRecords = ref<PurchaseSetupRecord[]>([
   record('vendors', 'Google Asia Pacific Pte, Ltd.', { tin: '428-076-490-00000', address: '70 Pasir Panjang Road #03-71 Mapletree Business City' }),
   record('vendors', 'GSC Gas Station', { tin: '256-687-300-00006', address: 'Saac II, Mactan, Lapu-Lapu City, 6015' }),
   record('vendors', 'Meta Platforms Ireland Limited'),
+  record('vendors', 'Mega GoldTown Pan Inc.'),
+  record('vendors', 'Mario S. Rizon Jr.'),
+  record('vendors', 'OpenAI OpCo, LLC'),
+  record('vendors', 'Park Secure Management Corporation'),
   record('vendors', 'RADIUS TELECOMS, INC.'),
-  record('purchases-discount-types', 'Custom', { computation: 'Amount', account: 'Purchase Discount', allowOverride: true }),
-  record('purchases-payment-terms', 'Paid Immediately', { account: 'Cash' }),
-  record('purchases-payment-terms', 'Monthly for 6 Months', { payments: 6, frequency: 'Months', dueOn: 1, account: 'Accounts Payable - Trade' }),
-  record('purchases-payment-terms', 'Paid full within 30 days', { dueOn: 30, account: 'Accounts Payable - Trade' }),
-  record('purchases-payment-terms', 'Paid within 25 days', { dueOn: 25, account: 'Accounts Payable - Trade' }),
-  record('purchases-payment-terms', 'Paid within 15 days', { dueOn: 15, account: 'Accounts Payable - Trade' }),
-  record('purchases-payment-methods', 'Cash', { account: 'Cash' }),
-  record('purchases-payment-methods', 'Check', { account: 'Cash' }),
+  record('vendors', "Robinson's Supermarket Corporation"),
+  record('vendors', 'RJ Siton'),
+  record('purchases-discount-types', 'Custom', { computation: 'Amount', accountId: '555', allowOverride: true }),
+  record('purchases-payment-terms', 'Paid Immediately', { accountId: '101' }),
+  record('purchases-payment-terms', 'Monthly for 6 Months', { payments: 6, frequency: 'Months', dueOn: 1, accountId: '201' }),
+  record('purchases-payment-terms', 'Paid full within 30 days', { dueOn: 30, accountId: '201' }),
+  record('purchases-payment-terms', 'Paid within 25 days', { dueOn: 25, accountId: '201' }),
+  record('purchases-payment-terms', 'Paid within 15 days', { dueOn: 15, accountId: '201' }),
+  record('purchases-payment-methods', 'Cash', { accountId: '101' }),
+  record('purchases-payment-methods', 'Check', { accountId: '101' }),
   record('purchases-payment-methods', 'Others'),
-  record('purchases-payment-methods', 'Bank Transfer', { account: 'Cash' }),
+  record('purchases-payment-methods', 'Bank Transfer', { accountId: '101' }),
 ])
 
 export function emptyPurchaseSetupRecord(kind: PurchaseSetupKind): PurchaseSetupRecord {

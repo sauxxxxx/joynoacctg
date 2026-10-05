@@ -1,40 +1,47 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppSidebar from './components/AppSidebar.vue'
 import AppTopbar from './components/AppTopbar.vue'
-import PurchaseJournalPage from './features/accounting/journals/PurchaseJournalPage.vue'
-import JournalPreviewPage from './features/accounting/journals/JournalPreviewPage.vue'
+import AppConfirmDialog from './components/ui/AppConfirmDialog.vue'
 import type { JournalPreviewKind } from './features/accounting/journals/journalPreviewData'
-import AccountSetupPage from './features/accounting/setup/AccountSetupPage.vue'
 import LoginPage from './features/auth/LoginPage.vue'
 import { useAuth } from './features/auth/authStore'
 import type { AuthCredentials } from './features/auth/authTypes'
-import PurchasesPage from './features/purchases/PurchasesPage.vue'
 import type { PurchaseKind } from './features/purchases/purchasePreviewData'
-import PurchaseSetupPage from './features/purchases/setup/PurchaseSetupPage.vue'
 import type { PurchaseSetupKind } from './features/purchases/setup/purchaseSetupData'
-import PurchaseReportsPage from './features/purchases/reports/PurchaseReportsPage.vue'
 import type { PurchaseReportKind } from './features/purchases/reports/purchaseReportData'
-import TaxFormsPage from './features/government/tax/TaxFormsPage.vue'
 import { isTaxFormId } from './features/government/tax/taxFormData'
-import YearlyTaxFormsPage from './features/government/tax/YearlyTaxFormsPage.vue'
 import { isYearlyTaxFormId } from './features/government/tax/yearlyTaxData'
-import TaxCertificatesPage from './features/government/tax/TaxCertificatesPage.vue'
 import { isTaxCertificateId } from './features/government/tax/taxCertificateData'
-import BankAccountsPage from './features/banking/BankAccountsPage.vue'
-import BankTransactionsPage from './features/banking/BankTransactionsPage.vue'
-import FixedAssetsPage from './features/assets/FixedAssetsPage.vue'
-import AccountingReportsPage from './features/accounting/reports/AccountingReportsPage.vue'
 import { accountingReportPageIds, analyticsPageIds, asPageId } from './features/accounting/reports/reportPages'
-import AnalyticsPage from './features/accounting/analytics/AnalyticsPage.vue'
-import CompanyPage from './features/company/CompanyPage.vue'
 import { companyPageIds } from './features/company/companyPages'
-import CustomersPage from './features/sales/customers/CustomersPage.vue'
-import SalesDocumentsPage from './features/sales/SalesDocumentsPage.vue'
-import SalesReportsPage from './features/sales/SalesReportsPage.vue'
-import SalesSetupPage from './features/sales/SalesSetupPage.vue'
 import type { DocumentKind, SetupKind } from './features/sales/salesPreviewStore'
 import { findPage } from './navigation'
+import { navigation } from './navigation'
+import { canAccessPage, filterNavigation } from './features/auth/permissions'
+
+const DashboardPage = defineAsyncComponent(() => import('./features/dashboard/DashboardPage.vue'))
+const AccessDenied = defineAsyncComponent(() => import('./features/auth/AccessDenied.vue'))
+const PurchaseJournalPage = defineAsyncComponent(() => import('./features/accounting/journals/PurchaseJournalPage.vue'))
+const JournalPreviewPage = defineAsyncComponent(() => import('./features/accounting/journals/JournalPreviewPage.vue'))
+const AccountSetupPage = defineAsyncComponent(() => import('./features/accounting/setup/AccountSetupPage.vue'))
+const PurchasesPage = defineAsyncComponent(() => import('./features/purchases/PurchasesPage.vue'))
+const PurchaseSetupPage = defineAsyncComponent(() => import('./features/purchases/setup/PurchaseSetupPage.vue'))
+const PurchaseReportsPage = defineAsyncComponent(() => import('./features/purchases/reports/PurchaseReportsPage.vue'))
+const TaxFormsPage = defineAsyncComponent(() => import('./features/government/tax/TaxFormsPage.vue'))
+const YearlyTaxFormsPage = defineAsyncComponent(() => import('./features/government/tax/YearlyTaxFormsPage.vue'))
+const TaxCertificatesPage = defineAsyncComponent(() => import('./features/government/tax/TaxCertificatesPage.vue'))
+const BirBooksPage = defineAsyncComponent(() => import('./features/government/books/BirBooksPage.vue'))
+const BankAccountsPage = defineAsyncComponent(() => import('./features/banking/BankAccountsPage.vue'))
+const BankTransactionsPage = defineAsyncComponent(() => import('./features/banking/BankTransactionsPage.vue'))
+const FixedAssetsPage = defineAsyncComponent(() => import('./features/assets/FixedAssetsPage.vue'))
+const AccountingReportsPage = defineAsyncComponent(() => import('./features/accounting/reports/AccountingReportsPage.vue'))
+const AnalyticsPage = defineAsyncComponent(() => import('./features/accounting/analytics/AnalyticsPage.vue'))
+const CompanyPage = defineAsyncComponent(() => import('./features/company/CompanyPage.vue'))
+const CustomersPage = defineAsyncComponent(() => import('./features/sales/customers/CustomersPage.vue'))
+const SalesDocumentsPage = defineAsyncComponent(() => import('./features/sales/SalesDocumentsPage.vue'))
+const SalesReportsPage = defineAsyncComponent(() => import('./features/sales/SalesReportsPage.vue'))
+const SalesSetupPage = defineAsyncComponent(() => import('./features/sales/SalesSetupPage.vue'))
 
 const activeId = ref('dashboard')
 const { authUser, authenticating, authError, signIn, signOut, clearAuthError } = useAuth()
@@ -42,6 +49,14 @@ const sidebarCollapsed = ref(false)
 const mobileOpen = ref(false)
 const isMobile = ref(false)
 const activePage = computed(() => findPage(activeId.value) ?? findPage('dashboard')!)
+const allowedNavigation = computed(() => filterNavigation(navigation, authUser.value))
+const allowedPageIds = computed(() => {
+  const ids: string[] = []
+  const visit = (items: typeof navigation) => items.forEach((item) => item.children ? visit(item.children) : ids.push(item.id))
+  visit(allowedNavigation.value)
+  return ids
+})
+const hasPageAccess = computed(() => canAccessPage(authUser.value, activeId.value))
 const journalPreviewIds: JournalPreviewKind[] = ['cash-disbursement-journal', 'cash-receipt-journal', 'sales-journal', 'general-journal']
 const journalPreviewId = computed(() => journalPreviewIds.find((id) => id === activeId.value))
 const purchaseIds: PurchaseKind[] = ['purchase-invoices', 'payrolls', 'cash-voucher', 'check-voucher', 'petty-cash-voucher', 'purchase-receipts']
@@ -116,7 +131,7 @@ function handleSignOut() {
 }
 
 watch([activePage, authUser], ([page, user]) => {
-  document.title = user ? `${page.label} | Joyno Accounting` : 'Sign in | Joyno Accounting'
+  document.title = user ? `${hasPageAccess.value ? page.label : 'Access denied'} | Joyno Accounting` : 'Sign in | Joyno Accounting'
 }, { immediate: true })
 
 onMounted(() => {
@@ -140,6 +155,7 @@ onBeforeUnmount(() => {
     <div class="app-shell" :class="{ 'app-shell--collapsed': sidebarCollapsed, 'app-shell--journal': isWorkspacePage }">
       <AppSidebar
         :active-id="activeId"
+        :items="allowedNavigation"
         :collapsed="sidebarCollapsed"
         :mobile-open="mobileOpen"
         :is-mobile="isMobile"
@@ -148,9 +164,9 @@ onBeforeUnmount(() => {
         @expand="sidebarCollapsed = false"
       />
       <div class="app-shell__body" :inert="mobileOpen">
-        <AppTopbar :collapsed="sidebarCollapsed" :is-mobile="isMobile" :user="authUser" @toggle-sidebar="toggleSidebar" @select="selectPage" @logout="handleSignOut" />
-        <main id="main-content" class="page-content" :class="{ 'page-content--journal': isWorkspacePage }" tabindex="-1">
-          <div v-if="!isSalesPage && !isWorkspacePage" class="page-content__heading">
+        <AppTopbar :collapsed="sidebarCollapsed" :is-mobile="isMobile" :user="authUser" :allowed-page-ids="allowedPageIds" @toggle-sidebar="toggleSidebar" @select="selectPage" @logout="handleSignOut" />
+        <main id="main-content" class="page-content" :class="{ 'page-content--journal': isWorkspacePage, 'page-content--dashboard': activeId === 'dashboard' }" tabindex="-1">
+          <div v-if="!isSalesPage && !isWorkspacePage && activeId !== 'dashboard'" class="page-content__heading">
             <nav v-if="activePage.path.length > 1" class="breadcrumbs" aria-label="Breadcrumb">
               <template v-for="(part, index) in activePage.path" :key="`${part}-${index}`">
                 <span v-if="index > 0" class="breadcrumbs__divider">/</span><span :class="{ 'breadcrumbs__current': index === activePage.path.length - 1 }">{{ part }}</span>
@@ -159,7 +175,10 @@ onBeforeUnmount(() => {
             <h1>{{ activePage.label }}</h1>
           </div>
           <div class="page-content__canvas">
-            <PurchaseJournalPage v-if="activeId === 'purchase-journal'" />
+            <AccessDenied v-if="!hasPageAccess" :page-name="activePage.label" @return="selectPage('dashboard')" />
+            <DashboardPage v-else-if="activeId === 'dashboard'" @navigate="selectPage" />
+            <BirBooksPage v-else-if="activeId === 'bir-books'" />
+            <PurchaseJournalPage v-else-if="activeId === 'purchase-journal'" />
             <JournalPreviewPage v-else-if="journalPreviewId" :key="journalPreviewId" :kind="journalPreviewId" />
             <AccountSetupPage v-else-if="accountSetupPageId" :key="accountSetupPageId" :page-id="accountSetupPageId" />
             <PurchasesPage v-else-if="purchasePageId" :key="purchasePageId" :kind="purchasePageId" />
@@ -183,4 +202,5 @@ onBeforeUnmount(() => {
       </div>
     </div>
   </template>
+  <AppConfirmDialog />
 </template>

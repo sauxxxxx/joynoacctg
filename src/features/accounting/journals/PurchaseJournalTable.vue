@@ -74,7 +74,7 @@ const totalAmountCents = computed(() => props.entries.reduce((total, entry) => t
               </button>
             </td>
             <td class="journal-table__date">{{ formatJournalDate(entry.date) }}</td>
-            <td><span class="journal-table__truncate" :title="entry.payee">{{ entry.payee }}</span></td>
+            <td><span class="journal-table__truncate" :title="entry.party">{{ entry.party }}</span></td>
             <td class="journal-table__amount">{{ formatJournalAmount(entry.amountCents) }}</td>
             <td><span class="journal-table__status">{{ entry.status }}</span></td>
             <td><span class="journal-table__truncate" :title="entry.remarks">{{ entry.remarks }}</span></td>

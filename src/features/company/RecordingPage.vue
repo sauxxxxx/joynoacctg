@@ -2,6 +2,7 @@
 import { computed, nextTick, ref } from 'vue'
 import { Info, List, Search, X } from '@lucide/vue'
 import AppSelect from '../../components/ui/AppSelect.vue'
+import { accountName, accounts } from '../accounting/setup/accountSetupData'
 import { accountMappings, recordAudit, recordingSettings, type AccountMapping, type RecordingSettings } from './companyStore'
 import { toOptions } from './recordConfig'
 import SaveBar from './SaveBar.vue'
@@ -39,32 +40,33 @@ const closedThrough = computed(() => draft.value.closeMonth && draft.value.close
 // Account mapping edits apply immediately, one row at a time.
 const mappingSearch = ref('')
 const mappingDialog = ref<HTMLDialogElement | null>(null)
-const mappingInput = ref<HTMLInputElement | null>(null)
 const editing = ref<AccountMapping | null>(null)
 const accountDraft = ref('')
 const mappingError = ref('')
 const mappingNotice = ref('')
+const accountOptions = computed(() => accounts.value.filter((account) => account.active)
+  .map((account) => ({ value: account.code, label: `${account.code} · ${account.name}` })))
 const visibleMappings = computed(() => {
   const term = mappingSearch.value.trim().toLocaleLowerCase()
-  return accountMappings.value.filter((row) => !term || `${row.label} ${row.account} ${row.description}`.toLocaleLowerCase().includes(term))
+  return accountMappings.value.filter((row) => !term || `${row.label} ${accountName(row.accountId)} ${row.description}`.toLocaleLowerCase().includes(term))
 })
 
 function editMapping(row: AccountMapping) {
   editing.value = row
-  accountDraft.value = row.account
+  accountDraft.value = row.accountId
   mappingError.value = ''
   mappingDialog.value?.showModal()
-  nextTick(() => mappingInput.value?.focus())
+  nextTick(() => document.getElementById('recording-map-account')?.focus())
 }
 
 function saveMapping() {
   const row = editing.value
-  const account = accountDraft.value.trim()
+  const accountId = accountDraft.value
   if (!row) return
-  if (!account) { mappingError.value = 'Enter the account to use.'; return }
-  accountMappings.value = accountMappings.value.map((item) => item.id === row.id ? { ...item, account } : item)
-  recordAudit('Company', 'Updated', `Account mapping: ${row.label}`, `${row.account} → ${account}`)
-  mappingNotice.value = `${row.label} now uses ${account}.`
+  if (!accountId) { mappingError.value = 'Choose the account to use.'; return }
+  accountMappings.value = accountMappings.value.map((item) => item.id === row.id ? { ...item, accountId } : item)
+  recordAudit('Company', 'Updated', `Account mapping: ${row.label}`, `${accountName(row.accountId)} → ${accountName(accountId)}`)
+  mappingNotice.value = `${row.label} now uses ${accountName(accountId)}.`
   mappingDialog.value?.close()
 }
 </script>
@@ -102,7 +104,7 @@ function saveMapping() {
         </div>
 
         <div v-else class="ws-stack">
-          <p class="ws-note"><Info :size="14" aria-hidden="true" />Accounts are names for now. They will be picked from Accounting › Chart of Accounts once it is available.</p>
+          <p class="ws-note"><Info :size="14" aria-hidden="true" />Mappings use active accounts from Accounting › Chart of Accounts.</p>
           <p v-if="mappingNotice" class="ws-notice" role="status">{{ mappingNotice }}</p>
           <div class="ws-panel ws-panel--clip">
             <div class="ws-panel__header">
@@ -115,7 +117,7 @@ function saveMapping() {
                 <tbody>
                   <tr v-for="row in visibleMappings" :key="row.id" class="co-list__row" @click="editMapping(row)">
                     <td><button class="co-list__link" type="button" :aria-label="`Change account for ${row.label}`" @click.stop="editMapping(row)">{{ row.label }}</button></td>
-                    <td>{{ row.account }}</td>
+                    <td>{{ row.accountId ? accountName(row.accountId) : 'Not configured' }}</td>
                     <td class="ws-muted">{{ row.description }}</td>
                   </tr>
                   <tr v-if="!visibleMappings.length" class="co-list__empty"><td colspan="3"><strong>No rows to show</strong><span>Try another search.</span></td></tr>
@@ -133,7 +135,7 @@ function saveMapping() {
         <div class="ws-dialog__header"><h2 id="mapping-dialog-title">{{ editing?.label }}</h2><button class="ws-icon-button" type="button" aria-label="Close" @click="mappingDialog?.close()"><X :size="18" aria-hidden="true" /></button></div>
         <div class="ws-dialog__body">
           <p>{{ editing?.description }}</p>
-          <label class="ws-field"><span>Account<em> *</em></span><input ref="mappingInput" v-model="accountDraft" maxlength="160" /></label>
+          <AppSelect id="recording-map-account" v-model="accountDraft" label="Account" required placeholder="Choose account" :options="accountOptions" />
           <p v-if="mappingError" class="ws-form-error" role="alert">{{ mappingError }}</p>
         </div>
         <div class="ws-dialog__footer"><button class="ws-button" type="button" @click="mappingDialog?.close()">Cancel</button><button class="ws-button ws-button--primary" type="submit">Save</button></div>

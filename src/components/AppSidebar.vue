@@ -3,13 +3,14 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { Search, X } from '@lucide/vue'
 import NavNode from './NavNode.vue'
 import BrandLogo from './BrandLogo.vue'
-import { findAncestorIds, navigation, type NavigationItem } from '../navigation'
+import { findAncestorIds, type NavigationItem } from '../navigation'
 
 const props = defineProps<{
   activeId: string
   collapsed: boolean
   mobileOpen: boolean
   isMobile: boolean
+  items: NavigationItem[]
 }>()
 
 const emit = defineEmits<{
@@ -42,7 +43,7 @@ function filterItems(items: NavigationItem[], term: string): NavigationItem[] {
 
 const visibleItems = computed(() => {
   const term = query.value.trim().toLocaleLowerCase()
-  return term ? filterItems(navigation, term) : navigation
+  return term ? filterItems(props.items, term) : props.items
 })
 
 function toggle(id: string) {
@@ -50,7 +51,7 @@ function toggle(id: string) {
     emit('expand')
     return
   }
-  if (navigation.some((item) => item.id === id)) {
+  if (props.items.some((item) => item.id === id)) {
     expandedIds.value = expandedIds.value.includes(id) ? [] : [id]
     return
   }

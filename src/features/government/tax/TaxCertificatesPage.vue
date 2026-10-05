@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { CalendarDays, LayoutGrid, ListFilter, Search } from '@lucide/vue'
+import { LayoutGrid, ListFilter, Search } from '@lucide/vue'
 import AppDatePicker from '../../../components/ui/AppDatePicker.vue'
+import AppSelect from '../../../components/ui/AppSelect.vue'
 import { formatMoney } from '../../../lib/money'
 import TaxCertificateEditor from './TaxCertificateEditor.vue'
 import { taxCertificateRecords, type TaxCertificateId, type TaxCertificateRecord } from './taxCertificateData'
+import { taxCertificateRepository } from '../../../services/previewRepositories'
+import { recordAudit } from '../../company/companyStore'
 import './taxForms.css'
 
 const props = defineProps<{ formId: TaxCertificateId }>()
@@ -39,12 +42,23 @@ const visibleRows = computed(() => {
 })
 const sourceOptions = ['Purchase receipts', 'Purchase invoices', 'Sales receipts', 'Other']
 const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+const sourceSelectOptions = [{ value: '', label: 'All sources' }, ...sourceOptions.map((value) => ({ value, label: value }))]
+const monthOptions = months.map((value) => ({ value, label: value }))
 
 function selectTab(tab: Tab) { activeTab.value = tab; selectedId.value = ''; filtersOpen.value = false; notice.value = '' }
-function saveRecord(record: TaxCertificateRecord) { taxCertificateRecords.value.push(record); selectedId.value = record.id; notice.value = `${title.value} draft created.` }
+async function saveRecord(record: TaxCertificateRecord) { const saved = await taxCertificateRepository.save(record); selectedId.value = saved.id; notice.value = `${title.value} draft created.` }
 function displayDate(value: string) { const [y, m, d] = value.split('-'); return y && m && d ? `${m}/${d}/${y}` : '—' }
 function closeFilters() { filtersOpen.value = false; nextTick(() => filterButton.value?.focus()) }
 function resetFilters() { source.value = ''; fromDate.value = '2026-09-01'; toDate.value = '2026-09-30'; month.value = 'September'; year.value = 2026; closeFilters() }
+async function receiveOrSend() {
+  const index = taxCertificateRecords.value.findIndex((record) => record.id === selectedId.value)
+  if (index < 0) return
+  const record = taxCertificateRecords.value[index]
+  const status = record.status === 'Draft' ? 'Received' : 'Sent'
+  await taxCertificateRepository.save({ ...record, status })
+  recordAudit('Government', status, title.value, `${record.party} · ${record.date}`)
+  notice.value = `${title.value} marked as ${status.toLocaleLowerCase()}.`
+}
 function onOutside(event: PointerEvent) { if (filtersOpen.value && event.target instanceof Node && !filterControl.value?.contains(event.target) && !(event.target instanceof Element && event.target.closest('.ui-date-picker__panel'))) filtersOpen.value = false }
 function onKeydown(event: KeyboardEvent) { if (event.key === 'Escape' && filtersOpen.value) closeFilters() }
 onMounted(() => { document.addEventListener('pointerdown', onOutside); document.addEventListener('keydown', onKeydown) })
@@ -58,10 +72,10 @@ onBeforeUnmount(() => { document.removeEventListener('pointerdown', onOutside); 
       <div class="tax-form-toolbar__actions">
         <label class="tax-search"><Search :size="15" aria-hidden="true" /><input v-model="query" type="search" placeholder="Type to filter" :aria-label="`Search ${title} certificates`" /></label>
         <div ref="filterControl" class="tax-filter-control"><button ref="filterButton" type="button" class="tax-icon-button" :aria-expanded="filtersOpen" aria-label="Open certificate filters" @click="filtersOpen = !filtersOpen"><ListFilter :size="17" /></button>
-          <aside v-if="filtersOpen" class="tax-filter-popover" aria-label="Certificate filters"><strong>{{ activeTab }} filters</strong><label>Source<select v-model="source"><option value="">All sources</option><option v-for="option in sourceOptions" :key="option">{{ option }}</option></select></label><template v-if="activeTab === 'Search'"><AppDatePicker v-model="fromDate" label="From" /><AppDatePicker v-model="toDate" label="To" /></template><template v-else-if="activeTab === 'Required Entries'"><label>Month<select v-model="month"><option v-for="option in months" :key="option">{{ option }}</option></select></label><label>Year<input v-model.number="year" type="number" min="2000" max="2100" /></label></template><div><button type="button" class="tax-button" @click="resetFilters">Reset</button><button type="button" class="tax-button tax-button--primary" @click="closeFilters">Apply</button></div></aside>
+          <aside v-if="filtersOpen" class="tax-filter-popover" aria-label="Certificate filters"><strong>{{ activeTab }} filters</strong><AppSelect v-model="source" label="Source" :options="sourceSelectOptions" /><template v-if="activeTab === 'Search'"><AppDatePicker v-model="fromDate" label="From" /><AppDatePicker v-model="toDate" label="To" /></template><template v-else-if="activeTab === 'Required Entries'"><AppSelect v-model="month" label="Month" :options="monthOptions" /><label>Year<input v-model.number="year" type="number" min="2000" max="2100" /></label></template><div><button type="button" class="tax-button" @click="resetFilters">Reset</button><button type="button" class="tax-button tax-button--primary" @click="closeFilters">Apply</button></div></aside>
         </div>
         <button type="button" class="tax-button" @click="editorOpen = true">Create tax certificate manually</button>
-        <button type="button" class="tax-button" :disabled="!selectedId">Receive / send</button>
+        <button type="button" class="tax-button" :disabled="!selectedId" @click="receiveOrSend">Receive / send</button>
         <button type="button" class="tax-icon-button" :aria-pressed="compact" aria-label="Toggle compact rows" @click="compact = !compact"><LayoutGrid :size="18" /></button>
       </div>
     </header>

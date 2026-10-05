@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { X } from '@lucide/vue'
 import AppDatePicker from '../../../components/ui/AppDatePicker.vue'
+import AppSelect from '../../../components/ui/AppSelect.vue'
 import { formatMoney, parseMoneyToCents } from '../../../lib/money'
 import { yearlyTaxConfigs, type YearlyTaxFormId, type YearlyTaxRecord } from './yearlyTaxData'
 
@@ -15,6 +16,7 @@ const amount = ref('0.00')
 const deadline = ref('')
 const entry = ref('')
 const error = ref('')
+const statusOptions = ['Draft', 'Filed'].map((value) => ({ value, label: value }))
 
 watch(() => [props.open, props.record, props.formId] as const, async ([open]) => {
   year.value = props.record?.year ?? 2026
@@ -49,7 +51,7 @@ function save() {
       <header><div><h2>{{ record ? 'Edit' : 'New' }} {{ config.title }} entry</h2><p>Annual tax-return preview. Changes are stored locally.</p></div><button type="button" aria-label="Close form" @click="dialog?.close()"><X :size="18" /></button></header>
       <div class="tax-entry-editor__fields">
         <label>Year <span>*</span><input v-model.number="year" type="number" min="2000" max="2100" /></label>
-        <label>Status <span>*</span><select v-model="status"><option>Draft</option><option>Filed</option></select></label>
+        <AppSelect v-model="status" label="Status" required :options="statusOptions" />
         <label v-if="config.amountLabel">{{ config.amountLabel }} <span>*</span><input v-model="amount" inputmode="decimal" placeholder="0.00" /></label>
         <AppDatePicker v-model="deadline" label="Deadline" required :invalid="Boolean(error && !deadline)" />
         <label v-if="config.entryLabel" class="tax-entry-editor__wide">{{ config.entryLabel }}<input v-model="entry" maxlength="120" placeholder="Optional journal reference" /></label>
