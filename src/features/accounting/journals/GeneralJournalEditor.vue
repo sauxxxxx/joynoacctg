@@ -4,18 +4,20 @@ import { Plus, Trash2, X } from '@lucide/vue'
 import AppDatePicker from '../../../components/ui/AppDatePicker.vue'
 import AppSelect, { type SelectOption } from '../../../components/ui/AppSelect.vue'
 import { toIsoDate } from '../../../components/ui/dateUtils'
-import { accounts } from '../setup/accountSetupData'
+import { useCollections } from '../../../services/collectionStore'
+import { accountStore, accounts } from '../setup/accountSetupData'
 import { amountInCents, validateJournalDraft, type JournalDraftInput } from './journalDraft'
 import { formatJournalAmount } from './purchaseJournalData'
 import type { JournalPreviewEntry } from './journalPreviewData'
 
 const props = defineProps<{ open: boolean; entry: JournalPreviewEntry | null; nextJournalNumber: string }>()
+useCollections(accountStore)
 const emit = defineEmits<{ close: []; save: [entry: JournalPreviewEntry] }>()
 const dialog = ref<HTMLDialogElement | null>(null)
 const error = ref('')
 const activeAccounts = computed(() => accounts.value.filter((account) => account.active))
 const accountOptions = computed<SelectOption[]>(() => activeAccounts.value.map((account) => ({
-  value: account.code,
+  value: account.id,
   label: `${account.code} · ${account.name}`,
 })))
 const journalTypeOptions: SelectOption[] = [
