@@ -45,7 +45,7 @@ export function validateJournalDraft(input: JournalDraftInput, existing?: Journa
   let totalCredit = 0
   for (const [index, line] of input.lines.entries()) {
     if (!line.accountId.trim()) return { error: `Enter an account on line ${index + 1}.` }
-    if (!accounts.value.some((account) => account.active && account.code === line.accountId.trim())) {
+    if (!accounts.value.some((account) => account.active && account.id === line.accountId.trim())) {
       return { error: `Choose an active Chart of Accounts entry on line ${index + 1}.` }
     }
     const debitCents = amountInCents(line.debit)
