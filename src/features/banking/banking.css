@@ -73,3 +73,4 @@
 .banking-editor footer > span { flex: 1; }
 @media (max-width: 1180px) { .banking-toolbar { align-items: flex-start; } .banking-toolbar__actions { flex-wrap: wrap; justify-content: flex-end; } .banking-search { width: 195px; } }
 @media (max-width: 760px) { .banking-editor__fields { grid-template-columns: 1fr; } .banking-editor__wide, .banking-editor__check, .banking-editor__error { grid-column: 1; } }
+fieldset.banking-editor__fields { min-width: 0; margin: 0; border: 0; }

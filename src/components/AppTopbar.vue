@@ -6,7 +6,7 @@ import type { AuthUser } from '../features/auth/authTypes'
 import AccountMenu from './AccountMenu.vue'
 import BrandLogo from './BrandLogo.vue'
 
-defineProps<{ collapsed: boolean; isMobile: boolean; user: AuthUser }>()
+const props = defineProps<{ collapsed: boolean; isMobile: boolean; user: AuthUser; allowedPageIds: string[] }>()
 
 const emit = defineEmits<{
   toggleSidebar: []
@@ -20,7 +20,7 @@ const notificationsOpen = ref(false)
 const searchInput = ref<HTMLInputElement | null>(null)
 const searchContainer = ref<HTMLElement | null>(null)
 const notificationsContainer = ref<HTMLElement | null>(null)
-const results = computed(() => searchPages(query.value).slice(0, 8))
+const results = computed(() => searchPages(query.value).filter((page) => props.allowedPageIds.includes(page.id)).slice(0, 8))
 const shortcutLabel = ref('Ctrl K')
 
 function select(id: string) {

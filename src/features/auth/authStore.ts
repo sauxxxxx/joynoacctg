@@ -1,9 +1,15 @@
 import { ref } from 'vue'
+import { dataMode } from '../../services/api/config'
+import { onSessionExpired, setApiCredentials } from '../../services/api/session'
+import { resetCollectionStores } from '../../services/collectionStore'
+import { resetSettingsStores } from '../../services/settingsStore'
+import { apiAuthService } from './apiAuthService'
 import { mockAuthService } from './mockAuthService'
 import { AuthenticationError, type AuthCredentials, type AuthSession, type AuthUser } from './authTypes'
+import { isSessionExpired } from './authSession'
 
-const SESSION_KEY = 'joyno.preview-auth-session'
-const SESSION_DURATION = 8 * 60 * 60 * 1000
+const SESSION_KEY = dataMode === 'api' ? 'joyno.auth-session' : 'joyno.preview-auth-session'
+const authService = dataMode === 'api' ? apiAuthService : mockAuthService
 
 function isAuthUser(value: unknown): value is AuthUser {
   if (!value || typeof value !== 'object') return false
@@ -26,7 +32,8 @@ function restoreSession(): AuthSession | null {
     const stored = window.sessionStorage.getItem(SESSION_KEY)
     if (!stored) return null
     const session = JSON.parse(stored) as Partial<AuthSession>
-    if (!isAuthUser(session.user) || typeof session.expiresAt !== 'number' || session.expiresAt <= Date.now()) {
+    if (!isAuthUser(session.user) || typeof session.expiresAt !== 'number' || isSessionExpired(session.expiresAt)
+      || typeof session.companyId !== 'string' || typeof session.accessToken !== 'string') {
       removeStoredSession()
       return null
     }
@@ -37,36 +44,46 @@ function restoreSession(): AuthSession | null {
   }
 }
 
-const restoredSession = restoreSession()
-const authUser = ref<AuthUser | null>(restoredSession?.user ?? null)
+let session: AuthSession | null = restoreSession()
+const authUser = ref<AuthUser | null>(session?.user ?? null)
 const authenticating = ref(false)
 const authError = ref('')
 let expiryTimer: number | undefined
 
-function scheduleExpiry(expiresAt: number) {
+function clearSession(message = '') {
   if (expiryTimer) window.clearTimeout(expiryTimer)
-  expiryTimer = window.setTimeout(() => {
-    removeStoredSession()
-    authUser.value = null
-    authError.value = 'Your preview session expired. Sign in again to continue.'
-  }, Math.max(0, expiresAt - Date.now()))
+  expiryTimer = undefined
+  session = null
+  setApiCredentials(null)
+  removeStoredSession()
+  resetCollectionStores()
+  resetSettingsStores()
+  authUser.value = null
+  authError.value = message
 }
 
-if (restoredSession) scheduleExpiry(restoredSession.expiresAt)
+function activate(next: AuthSession) {
+  session = next
+  setApiCredentials({ accessToken: next.accessToken, companyId: next.companyId })
+  authUser.value = next.user
+  if (expiryTimer) window.clearTimeout(expiryTimer)
+  expiryTimer = window.setTimeout(() => clearSession('Your session expired. Sign in again to continue.'), Math.max(0, next.expiresAt - Date.now()))
+}
+
+if (session) activate(session)
+onSessionExpired((message) => { if (session) clearSession(message) })
 
 async function signIn(credentials: AuthCredentials) {
   authenticating.value = true
   authError.value = ''
   try {
-    const user = await mockAuthService.signIn(credentials)
-    const session: AuthSession = { user, expiresAt: Date.now() + SESSION_DURATION }
+    const next = await authService.signIn(credentials)
     try {
-      window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(session))
+      window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(next))
     } catch {
-      // Keep the preview session in memory when browser storage is unavailable.
+      // Keep the session in memory when browser storage is unavailable.
     }
-    authUser.value = user
-    scheduleExpiry(session.expiresAt)
+    activate(next)
     return true
   } catch (error) {
     authError.value = error instanceof AuthenticationError ? error.message : 'Sign in could not be completed. Try again.'
@@ -77,15 +94,19 @@ async function signIn(credentials: AuthCredentials) {
 }
 
 function signOut() {
-  if (expiryTimer) window.clearTimeout(expiryTimer)
-  expiryTimer = undefined
-  removeStoredSession()
-  authUser.value = null
-  authError.value = ''
+  const current = session
+  clearSession()
+  // The server revokes the token; the local session is already gone, so a failure here is not shown.
+  if (current) void authService.signOut(current).catch(() => undefined)
 }
 
 function clearAuthError() {
   authError.value = ''
+}
+
+/** Display name for audit attribution in preview mode. The API records the actor from the token. */
+export function currentActorName(): string {
+  return authUser.value?.name ?? 'Unknown user'
 }
 
 export function useAuth() {

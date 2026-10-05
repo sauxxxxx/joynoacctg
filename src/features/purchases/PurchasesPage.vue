@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { CalendarDays, LayoutGrid, ListFilter, Plus, Search } from '@lucide/vue'
 import AppDatePicker from '../../components/ui/AppDatePicker.vue'
 import AppSelect from '../../components/ui/AppSelect.vue'
+import AppPagination from '../../components/ui/AppPagination.vue'
+import { paginate } from '../../lib/tableQuery'
+import { confirmAction } from '../../services/dialogService'
+import { purchaseRepository } from '../../services/previewRepositories'
 import PurchasesEditor from './PurchasesEditor.vue'
 import PurchasesTable from './PurchasesTable.vue'
-import { purchaseConfigs, purchaseRecords, type PurchaseKind, type PurchaseRecord } from './purchasePreviewData'
+import { purchaseConfigs, purchaseRecords, purchaseVendorName, type PurchaseKind, type PurchaseRecord } from './purchasePreviewData'
+import { purchaseSetupRecords } from './setup/purchaseSetupData'
 import './purchases.css'
 
 const props = defineProps<{ kind: PurchaseKind }>()
@@ -20,6 +25,8 @@ const editorOpen = ref(false)
 const selectedRecord = ref<PurchaseRecord | null>(null)
 const notice = ref('')
 const filterError = ref('')
+const currentPage = ref(1)
+const pageSize = 25
 const today = new Date()
 const initialFrom = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
 const initialTo = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()).padStart(2, '0')}`
@@ -37,7 +44,7 @@ const newRecordLabel = computed(() => ({
   'petty-cash-voucher': 'New petty cash voucher',
   'purchase-receipts': 'New receipt',
 })[props.kind])
-const vendorOptions = computed(() => [{ value: '', label: 'All vendors' }, ...[...new Set(purchaseRecords.value.filter((item) => item.kind === props.kind).map((item) => item.vendor).filter(Boolean))].sort().map((name) => ({ value: name, label: name }))])
+const vendorOptions = computed(() => [{ value: '', label: 'All vendors' }, ...purchaseSetupRecords.value.filter((item) => item.kind === 'vendors' && item.active).map((item) => ({ value: item.id, label: item.name }))])
 const filtered = computed(() => activeTab.value !== 'Search' || Boolean(search.value.trim()) || applied.value.from !== initialFrom || applied.value.to !== initialTo || applied.value.vendor !== '' || applied.value.year !== String(today.getFullYear()))
 const hasAppliedFilters = computed(() => isPayroll.value
   ? applied.value.year !== String(today.getFullYear())
@@ -46,10 +53,12 @@ const visibleRecords = computed(() => {
   const query = search.value.trim().toLocaleLowerCase()
   return purchaseRecords.value.filter((record) => record.kind === props.kind)
     .filter((record) => activeTab.value === 'Search' || (activeTab.value === 'Unpaid' ? record.paidCents < record.totalCents : record.status === 'Draft'))
-    .filter((record) => isPayroll.value ? record.year === applied.value.year : record.date >= applied.value.from && record.date <= applied.value.to && (!applied.value.vendor || record.vendor === applied.value.vendor))
-    .filter((record) => !query || [record.number, record.vendor, record.remarks, record.paymentMethod, record.status, record.period, record.payGroup].some((value) => value.toLocaleLowerCase().includes(query)))
+    .filter((record) => isPayroll.value ? record.year === applied.value.year : record.date >= applied.value.from && record.date <= applied.value.to && (!applied.value.vendor || record.vendorId === applied.value.vendor))
+    .filter((record) => !query || [record.number, purchaseVendorName(record.vendorId), record.remarks, record.paymentMethod, record.status, record.period, record.payGroup].some((value) => value.toLocaleLowerCase().includes(query)))
     .sort((a, b) => a.date.localeCompare(b.date))
 })
+const pagedRecords = computed(() => paginate(visibleRecords.value, currentPage.value, pageSize).items)
+watch(visibleRecords, () => { currentPage.value = 1 })
 
 function applyFilters() {
   if (!isPayroll.value && fromDate.value > toDate.value) { filterError.value = 'The end date must be on or after the start date.'; return }
@@ -84,10 +93,8 @@ onBeforeUnmount(() => {
   document.removeEventListener('keydown', onFilterKeydown)
 })
 function openEditor(record: PurchaseRecord | null = null) { selectedRecord.value = record; editorOpen.value = true; notice.value = '' }
-function saveRecord(record: PurchaseRecord) {
-  const index = purchaseRecords.value.findIndex((item) => item.id === record.id)
-  if (index >= 0) purchaseRecords.value.splice(index, 1, record)
-  else purchaseRecords.value.push(record)
+async function saveRecord(record: PurchaseRecord) {
+  await purchaseRepository.save(record)
   activeTab.value = 'Search'; search.value = ''
   if (!isPayroll.value) {
     if (record.date < applied.value.from) applied.value.from = record.date
@@ -97,9 +104,9 @@ function saveRecord(record: PurchaseRecord) {
   } else { payrollYear.value = record.year; applied.value.year = record.year }
   notice.value = `${record.number} saved as a temporary draft. Nothing was posted.`
 }
-function deleteRecord(record: PurchaseRecord) {
-  if (!window.confirm(`Delete draft ${record.number}?`)) return
-  purchaseRecords.value = purchaseRecords.value.filter((item) => item.id !== record.id)
+async function deleteRecord(record: PurchaseRecord) {
+  if (!await confirmAction({ title: 'Delete purchase draft?', message: `${record.number} will be permanently removed from this preview.`, confirmLabel: 'Delete draft', destructive: true })) return
+  await purchaseRepository.remove(record.id)
   editorOpen.value = false
   notice.value = `${record.number} draft deleted.`
 }
@@ -132,7 +139,8 @@ function deleteRecord(record: PurchaseRecord) {
     </header>
     <p v-if="notice" class="purchases-notice" role="status">{{ notice }}</p>
     <div class="purchases-workspace" :class="{ 'purchases-workspace--compact': compact }">
-      <PurchasesTable :kind="kind" :records="visibleRecords" :filtered="filtered" @open="openEditor" @reset="resetFilters" @add="openEditor()" />
+      <PurchasesTable :kind="kind" :records="pagedRecords" :filtered="filtered" @open="openEditor" @reset="resetFilters" @add="openEditor()" />
+      <AppPagination v-model:page="currentPage" :page-size="pageSize" :total="visibleRecords.length" :label="config.title.toLocaleLowerCase()" />
     </div>
     <PurchasesEditor :open="editorOpen" :kind="kind" :record="selectedRecord" @close="editorOpen = false" @save="saveRecord" @delete="deleteRecord" />
   </section>

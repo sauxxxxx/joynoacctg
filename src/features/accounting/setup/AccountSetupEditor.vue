@@ -51,11 +51,11 @@ function save() {
   if (props.kind === 'account') {
     if (accounts.value.some((item) => item.code === code && item.code !== props.record?.code)) { error.value = 'This account code already exists.'; return }
     if (!draft.value.parentCode || !categories.value.some((item) => item.code === draft.value.parentCode)) { error.value = 'Choose a valid parent category.'; return }
-    emit('saveAccount', { code, name, parentCode: draft.value.parentCode, type: draft.value.type, remarks: draft.value.remarks.trim(), active: draft.value.active, itr: draft.value.itr.trim(), legalBasis: draft.value.legalBasis.trim() })
+    emit('saveAccount', { id: props.record?.id ?? '', code, name, parentCode: draft.value.parentCode, type: draft.value.type, remarks: draft.value.remarks.trim(), active: draft.value.active, itr: draft.value.itr.trim(), legalBasis: draft.value.legalBasis.trim() })
   } else {
     if (categories.value.some((item) => item.code === code && item.code !== props.record?.code)) { error.value = 'This category code already exists.'; return }
     if (draft.value.parentCode && !parentOptions.value.some((item) => item.value === draft.value.parentCode)) { error.value = 'Choose a valid parent category.'; return }
-    emit('saveCategory', { code, name, parentCode: draft.value.parentCode, remarks: draft.value.remarks.trim(), active: draft.value.active, accountType: draft.value.mappedType ? draft.value.mappedType as AccountType : undefined })
+    emit('saveCategory', { id: props.record?.id ?? '', code, name, parentCode: draft.value.parentCode, remarks: draft.value.remarks.trim(), active: draft.value.active, accountType: draft.value.mappedType ? draft.value.mappedType as AccountType : undefined })
   }
   emit('close')
 }

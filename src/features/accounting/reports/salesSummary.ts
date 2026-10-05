@@ -24,8 +24,6 @@ export interface SalesSummaryRow {
   withholdingCents: number
 }
 
-const toCents = (value: number) => Math.round((Number(value) || 0) * 100)
-
 export function includedInvoices(documents: SalesDocument[], range: { from: string; to: string }, includeDrafts: boolean): SalesDocument[] {
   const statuses = new Set<SalesDocument['status']>(includeDrafts ? ['Unpaid', 'Paid', 'Draft'] : ['Unpaid', 'Paid'])
   return documents.filter((item) => item.kind === 'sales-invoices' && statuses.has(item.status) && item.date >= range.from && item.date <= range.to)
@@ -40,14 +38,14 @@ export function summarizeSales(
   for (const invoice of invoices) {
     const key = grouping === 'month' ? invoice.date.slice(0, 7) : invoice.customerId
     const row = groups.get(key) ?? { key, label: labelFor(invoice), invoiceCount: 0, grossCents: 0, discountCents: 0, netCents: 0, vatCents: 0, withholdingCents: 0 }
-    const gross = invoice.lines.reduce((sum, line) => sum + toCents(line.quantity * line.unitPrice), 0)
-    const net = toCents(invoice.amount)
+    const gross = invoice.lines.reduce((sum, line) => sum + Math.round(line.quantity * line.unitPriceCents), 0)
+    const net = invoice.amountCents
     row.invoiceCount += 1
     row.grossCents += gross
     row.netCents += net
     row.discountCents += Math.max(0, gross - net)
-    row.vatCents += invoice.lines.reduce((sum, line) => sum + toCents(line.vatAmount), 0)
-    row.withholdingCents += invoice.lines.reduce((sum, line) => sum + toCents(line.withholdingTaxAmount), 0)
+    row.vatCents += invoice.lines.reduce((sum, line) => sum + line.vatCents, 0)
+    row.withholdingCents += invoice.lines.reduce((sum, line) => sum + line.withholdingTaxCents, 0)
     groups.set(key, row)
   }
   const rows = [...groups.values()].sort((a, b) => grouping === 'month' ? a.key.localeCompare(b.key) : b.netCents - a.netCents || a.label.localeCompare(b.label))

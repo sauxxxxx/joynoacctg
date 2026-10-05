@@ -63,6 +63,10 @@ export interface RecordsConfig {
   /** Live preview shown under the form, e.g. a rendered message. */
   preview?: (draft: AnyRecord) => { heading: string; body: string } | null
   footer?: (records: AnyRecord[]) => string
+  /** Convert a stored domain record to an editable form model. */
+  toDraft?: (record: AnyRecord) => AnyRecord
+  /** Convert a validated form model back to its stored domain representation. */
+  fromDraft?: (draft: AnyRecord) => AnyRecord
 }
 
 /** Lets each config keep its own record type while the page works with `AnyRecord`. */

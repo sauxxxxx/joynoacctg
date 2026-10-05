@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { X } from '@lucide/vue'
 import AppDatePicker from '../../../components/ui/AppDatePicker.vue'
+import AppSelect from '../../../components/ui/AppSelect.vue'
 import { formatMoney, parseMoneyToCents } from '../../../lib/money'
 import { taxFormConfigs, type TaxFormId, type TaxFormRecord, type TaxStatus } from './taxFormData'
 
@@ -12,6 +13,8 @@ const config = computed(() => taxFormConfigs[props.formId])
 const monthOptions = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const quarterOptions = ['1st Quarter', '2nd Quarter', '3rd Quarter', '4th Quarter']
 const periodOptions = computed(() => config.value.cadence === 'Monthly' ? monthOptions : quarterOptions)
+const periodSelectOptions = computed(() => periodOptions.value.map((value) => ({ value, label: value })))
+const statusOptions = ['Draft', 'Filed'].map((value) => ({ value, label: value }))
 const period = ref('')
 const status = ref<TaxStatus>('Draft')
 const taxDue = ref('0.00')
@@ -53,8 +56,8 @@ function save() {
     <form @submit.prevent="save">
       <header><div><h2>{{ record ? 'Edit' : 'New' }} {{ config.title }} entry</h2><p>{{ config.cadence }} return for {{ year }}. Preview data is stored locally.</p></div><button type="button" aria-label="Close form" @click="dialog?.close()"><X :size="18" /></button></header>
       <div class="tax-entry-editor__fields">
-        <label>{{ config.cadence === 'Monthly' ? 'Month' : 'Quarter' }} <span>*</span><select v-model="period"><option v-for="option in periodOptions" :key="option">{{ option }}</option></select></label>
-        <label>Status <span>*</span><select v-model="status"><option>Draft</option><option>Filed</option></select></label>
+        <AppSelect v-model="period" :label="config.cadence === 'Monthly' ? 'Month' : 'Quarter'" required :options="periodSelectOptions" />
+        <AppSelect v-model="status" label="Status" required :options="statusOptions" />
         <label v-if="config.hasTaxDue">Tax due <span>*</span><input v-model="taxDue" inputmode="decimal" placeholder="0.00" /></label>
         <AppDatePicker v-model="dueDate" label="Due date" required :invalid="Boolean(error && !dueDate)" />
         <label v-if="config.entryLabel" class="tax-entry-editor__wide">{{ config.entryLabel }}<input v-model="entry" maxlength="120" placeholder="Optional journal reference" /></label>

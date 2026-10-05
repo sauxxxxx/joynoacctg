@@ -2,6 +2,7 @@
 import { computed, nextTick, ref } from 'vue'
 import { Check, Info, Lock, Plus, Search, Trash2, X } from '@lucide/vue'
 import AppSelect from '../../components/ui/AppSelect.vue'
+import { roleRepository } from '../../services/previewRepositories'
 import {
   emptyPermissions, permissionActions, permissionModules, recordAudit, roles, users,
   type PermissionAction, type PermissionModule, type Role,
@@ -50,14 +51,14 @@ function toggleRow(module: PermissionModule, value: boolean) {
   permissionActions.forEach((action) => { draft.value.permissions[module][action] = value })
 }
 
-function save() {
+async function save() {
   const name = draft.value.name.trim()
   if (!name) { error.value = 'Role name is required.'; return }
   if (roles.value.some((role) => role.id !== draft.value.id && role.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase())) { error.value = 'Another role has this name.'; return }
   if (draft.value.id && !draft.value.active && assigned(draft.value.id)) { error.value = 'Users still have this role. Assign them another role before deactivating it.'; return }
   const isNew = !draft.value.id
   const role: Role = { ...clone(draft.value), id: draft.value.id || crypto.randomUUID(), name, description: draft.value.description.trim() }
-  roles.value = isNew ? [...roles.value, role] : roles.value.map((item) => item.id === role.id ? role : item)
+  await roleRepository.save(role)
   recordAudit('Company', isNew ? 'Created' : 'Updated', `Role: ${role.name}`)
   notice.value = `${role.name} ${isNew ? 'added' : 'updated'}.`
   formDialog.value?.close()
@@ -74,10 +75,10 @@ function deleteFromForm() {
   deleteDialog.value?.showModal()
 }
 
-function confirmDelete() {
+async function confirmDelete() {
   const role = pendingDelete.value
   if (!role) return
-  roles.value = roles.value.filter((item) => item.id !== role.id)
+  await roleRepository.remove(role.id)
   recordAudit('Company', 'Deleted', `Role: ${role.name}`)
   notice.value = `${role.name} deleted.`
   deleteDialog.value?.close()
@@ -87,7 +88,7 @@ function confirmDelete() {
 <template>
   <section class="ws-page co-page" aria-label="Roles">
     <div class="ws-stack">
-      <p class="ws-note"><Info :size="14" aria-hidden="true" />Sign-in is not connected yet, so permissions are recorded but not enforced.</p>
+      <p class="ws-note"><Info :size="14" aria-hidden="true" />Preview permissions shape navigation and actions. Backend authorization remains the security boundary.</p>
       <p v-if="notice" class="ws-notice" role="status">{{ notice }}</p>
       <div class="ws-panel ws-panel--clip">
         <div class="ws-panel__header">

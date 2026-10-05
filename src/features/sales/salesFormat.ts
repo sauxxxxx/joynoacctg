@@ -1,8 +1,8 @@
 const plainAmount = new Intl.NumberFormat('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-/** Amounts in Sales tables use the legacy plain format, e.g. 1,150.50. */
-export function tableAmount(value: number): string {
-  return plainAmount.format(value)
+/** Amounts in Sales tables are stored as integer centavos and displayed as pesos. */
+export function tableAmount(cents: number): string {
+  return plainAmount.format(cents / 100)
 }
 
 const longDate = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' })

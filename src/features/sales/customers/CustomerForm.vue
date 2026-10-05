@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { Trash2 } from '@lucide/vue'
 import AppSelect from '../../../components/ui/AppSelect.vue'
 import { recordAudit } from '../../company/companyStore'
+import { customerRepository } from '../../../services/previewRepositories'
 import SalesEditorShell from '../SalesEditorShell.vue'
 import { salesDocuments } from '../salesPreviewStore'
 import { blankCustomer, customers, type Customer, type CustomerType } from './customerPreviewStore'
@@ -37,7 +38,7 @@ const errors = computed(() => {
 })
 const shown = (key: string) => submitted.value ? errors.value[key] : ''
 
-function save() {
+async function save() {
   submitted.value = true
   const first = Object.values(errors.value)[0]
   saveError.value = first ? `Please fix the highlighted fields.` : ''
@@ -48,7 +49,8 @@ function save() {
   const saved: Customer = { ...trimmed, id: value.id || crypto.randomUUID(), tradeName: isCompany.value ? trimmed.tradeName : '' }
   // Only one customer can be the default.
   const others = customers.value.filter((item) => item.id !== saved.id).map((item) => saved.isDefault ? { ...item, isDefault: false } : item)
-  customers.value = isNew ? [...others, saved] : customers.value.map((item) => item.id === saved.id ? saved : (saved.isDefault ? { ...item, isDefault: false } : item))
+  if (saved.isDefault) await Promise.all(others.filter((item) => item.isDefault).map((item) => customerRepository.save({ ...item, isDefault: false })))
+  await customerRepository.save(saved)
   recordAudit('Sales', isNew ? 'Created' : 'Updated', `Customer: ${saved.name}`)
   emit('saved', `${saved.name} ${isNew ? 'added' : 'updated'}.`)
 }
@@ -61,9 +63,9 @@ function askDelete() {
   deleteDialog.value?.showModal()
 }
 
-function remove() {
+async function remove() {
   const name = draft.value.name
-  customers.value = customers.value.filter((item) => item.id !== draft.value.id)
+  await customerRepository.remove(draft.value.id)
   recordAudit('Sales', 'Deleted', `Customer: ${name}`)
   deleteDialog.value?.close()
   emit('deleted', `${name} deleted.`)

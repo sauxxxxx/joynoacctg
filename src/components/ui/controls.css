@@ -1,4 +1,4 @@
-.ui-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+    .ui-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
 .ui-control-label { display: block; margin-bottom: 7px; color: #5f6971; font-size: 11px; font-weight: 600; }
 .ui-control-label span { color: #b63838; }
 .ui-control-trigger { width: 100%; min-height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 10px; border: 1px solid #cbd3d8; border-radius: 5px; background: #fff; color: #2e353b; text-align: left; font-size: 12px; }

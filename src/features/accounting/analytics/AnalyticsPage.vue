@@ -89,6 +89,7 @@ const fourthTile = computed(() => {
     case 'equity': return { label: 'Share of total assets', value: totalAssets.value > 0 ? percent(total.value / totalAssets.value * 100) : '—', note: `${page.value.label} ÷ total assets` }
     case 'revenue': return { label: 'Largest category', value: breakdown.value[0]?.label ?? '—', note: breakdown.value[0] ? `${share(breakdown.value[0].cents)} of revenue` : '' }
     case 'expense': return { label: 'Share of revenue', value: periodRevenue.value > 0 ? percent(total.value / periodRevenue.value * 100) : '—', note: 'Expenses ÷ revenue, same period' }
+    default: return { label: 'Metric', value: '—', note: '' }
   }
 })
 const periodText = computed(() => isBalance.value

@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { JournalPreviewEntry } from './journalPreviewData'
 import { formatJournalAmount, journalLineTotals } from './purchaseJournalData'
+import { accountName } from '../setup/accountSetupData'
 
 const props = defineProps<{ entry: JournalPreviewEntry | null; editable?: boolean }>()
 const emit = defineEmits<{ edit: [entry: JournalPreviewEntry] }>()
@@ -25,7 +26,7 @@ const balanced = computed(() => totals.value.debitCents === totals.value.creditC
           </colgroup>
           <thead><tr><th scope="col">Account</th><th scope="col">Subsidiary</th><th scope="col">Debit</th><th scope="col">Credit</th><th scope="col">Remarks</th></tr></thead>
           <tbody><tr v-for="(line, index) in entry.lines" :key="index">
-            <td>{{ line.accountName }}</td><td>{{ line.subsidiary || '' }}</td>
+            <td>{{ accountName(line.accountId) }}</td><td>{{ line.subsidiary || '' }}</td>
             <td class="journal-detail__amount">{{ formatJournalAmount(line.debitCents) }}</td>
             <td class="journal-detail__amount">{{ formatJournalAmount(line.creditCents) }}</td>
             <td>{{ line.remarks || '' }}</td>

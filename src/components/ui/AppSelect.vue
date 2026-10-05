@@ -19,6 +19,7 @@ const props = withDefaults(defineProps<{
   disabled?: boolean
   required?: boolean
   invalid?: boolean
+  describedBy?: string
   compact?: boolean
 }>(), { placeholder: 'Select an option' })
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
@@ -146,7 +147,7 @@ onBeforeUnmount(() => {
       :id="uid" type="button" class="ui-control-trigger ui-select__trigger"
       role="combobox" aria-haspopup="listbox" :aria-expanded="isOpen" :aria-controls="listId"
       :aria-labelledby="`${labelId} ${valueId}`" :aria-activedescendant="isOpen ? `${listId}-${activeIndex}` : undefined"
-      :aria-required="required || undefined" :aria-invalid="invalid || undefined" :disabled="disabled"
+      :aria-required="required || undefined" :aria-invalid="invalid || undefined" :aria-describedby="describedBy" :disabled="disabled"
       @click="isOpen ? isOpen = false : open()" @keydown="onKeydown"
     >
       <span :id="valueId" :class="{ 'ui-select__placeholder': !selectedOption }">{{ selectedOption?.label || placeholder }}</span>

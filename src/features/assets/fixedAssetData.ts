@@ -6,8 +6,8 @@ export interface FixedAssetRecord {
   trackingNumber: string
   datePurchased: string
   description: string
-  vendor: string
-  goods: string
+  vendorId: string
+  itemId: string
   purchasePriceCents: number
   vatCents: number
   usefulLifeMonths: number
@@ -32,7 +32,7 @@ export const unclaimedAssets = ref<UnclaimedAssetRecord[]>([])
 
 export function emptyFixedAsset(): FixedAssetRecord {
   return {
-    id: '', salesInvoice: '', trackingNumber: '', datePurchased: '2026-09-30', description: '', vendor: '', goods: '',
+    id: '', salesInvoice: '', trackingNumber: '', datePurchased: '2026-09-30', description: '', vendorId: '', itemId: '',
     purchasePriceCents: 0, vatCents: 0, usefulLifeMonths: 60, salvageValueCents: 0, remarks: '', lapsedMonths: 0,
     warrantyExpirationDate: '',
   }

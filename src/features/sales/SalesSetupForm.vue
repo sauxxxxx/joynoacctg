@@ -2,7 +2,9 @@
 import { computed, ref } from 'vue'
 import { Trash2 } from '@lucide/vue'
 import AppSelect from '../../components/ui/AppSelect.vue'
+import { accountName, accounts } from '../accounting/setup/accountSetupData'
 import { recordAudit } from '../company/companyStore'
+import { salesSetupRepository } from '../../services/previewRepositories'
 import SalesEditorShell from './SalesEditorShell.vue'
 import { reportDate } from './salesFormat'
 import { salesDocuments, setupRecords, type PeriodUnit, type SetupKind, type SetupRecord } from './salesPreviewStore'
@@ -19,7 +21,7 @@ type Draft = Omit<SetupRecord, 'paymentDue'> & { paymentDue: PeriodUnit | '' }
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value))
 function blank(): Draft {
   return {
-    id: '', kind: props.kind, name: '', active: true, account: '', payments: 1, dueOn: 1, paymentDue: '',
+    id: '', kind: props.kind, name: '', active: true, accountId: '', payments: 1, dueOn: 1, paymentDue: '',
     frequencyEvery: 0, frequencyUnit: '', computation: 'Amount', rate: 0, allowOverride: false,
   }
 }
@@ -32,6 +34,8 @@ const saveError = ref('')
 
 const unitOptions = (['Days', 'Months', 'Years'] as PeriodUnit[]).map((value) => ({ value, label: value }))
 const computationOptions = [{ value: 'Amount', label: 'Amount' }, { value: 'Percentage', label: 'Percentage' }]
+const accountOptions = computed(() => accounts.value.filter((account) => account.active || account.code === draft.value.accountId)
+  .map((account) => ({ value: account.code, label: `${account.code} · ${account.name}` })))
 const isTerm = props.kind === 'sales-payment-terms'
 const isDiscount = props.kind === 'sales-discount-types'
 const multiple = computed(() => Number(draft.value.payments) > 1)
@@ -67,7 +71,7 @@ const schedule = computed(() => {
   return paymentSchedule({ ...value, paymentDue: value.paymentDue }, today)
 })
 
-function save() {
+async function save() {
   submitted.value = true
   const first = Object.values(errors.value)[0]
   saveError.value = first ? `Please fix the highlighted fields.` : ''
@@ -78,14 +82,14 @@ function save() {
     ...clone(value),
     id: value.id || crypto.randomUUID(),
     name: value.name.trim(),
-    account: value.account.trim(),
+    accountId: value.accountId,
     paymentDue: (value.paymentDue || 'Days') as PeriodUnit,
     payments: isTerm ? Math.trunc(Number(value.payments)) : 1,
     // A single payment has no succeeding payments.
     frequencyEvery: isTerm && multiple.value ? Math.trunc(Number(value.frequencyEvery)) : 0,
     frequencyUnit: isTerm && multiple.value ? value.frequencyUnit : '',
   }
-  setupRecords.value = isNew ? [...setupRecords.value, record] : setupRecords.value.map((item) => item.id === record.id ? record : item)
+  await salesSetupRepository.save(record)
   recordAudit('Sales', isNew ? 'Created' : 'Updated', `${label}: ${record.name}`)
   emit('saved', `${record.name} ${isNew ? 'added' : 'updated'}.`)
 }
@@ -100,9 +104,9 @@ function askDelete() {
   deleteDialog.value?.showModal()
 }
 
-function remove() {
+async function remove() {
   const name = draft.value.name
-  setupRecords.value = setupRecords.value.filter((item) => item.id !== draft.value.id)
+  await salesSetupRepository.remove(draft.value.id)
   recordAudit('Sales', 'Deleted', `${label}: ${name}`)
   deleteDialog.value?.close()
   emit('deleted', `${name} deleted.`)
@@ -151,10 +155,7 @@ function remove() {
       <h3 class="sales-card__title">Accounting</h3>
       <p class="sales-card__note">{{ isTerm ? 'Every invoice using this payment term will create a debit entry to the following account.' : isDiscount ? 'Discounts given on invoices are recorded in the following account.' : 'Receipts paid by this method are recorded in the following account.' }}</p>
       <div class="sales-form sales-card__form">
-        <label class="sales-card__narrow">Account
-          <input v-model="draft.account" maxlength="120" placeholder="e.g. Cash" />
-          <small class="sales-field-hint">Typed for now. It becomes a pick-list from the Chart of Accounts once that is available.</small>
-        </label>
+        <div class="sales-card__narrow"><AppSelect v-model="draft.accountId" label="Account" :options="accountOptions" placeholder="Choose account" /><small class="sales-field-hint">{{ draft.accountId ? accountName(draft.accountId) : 'Choose from the Chart of Accounts.' }}</small></div>
       </div>
       <label class="ws-check sales-card__check"><input v-model="draft.active" type="checkbox" /> This {{ label.toLocaleLowerCase() }} is active</label>
     </div>

@@ -11,6 +11,7 @@ const props = defineProps<{
   id?: string
   required?: boolean
   invalid?: boolean
+  describedBy?: string
   disabled?: boolean
   min?: string
   max?: string
@@ -176,7 +177,7 @@ onBeforeUnmount(() => {
     <span :id="labelId" class="ui-control-label">{{ label }}<span v-if="required" aria-hidden="true"> *</span></span>
     <button :id="uid" ref="trigger" type="button" class="ui-control-trigger ui-date-picker__trigger"
       :aria-labelledby="labelId" :aria-description="spokenValue" :aria-expanded="open" :aria-controls="panelId"
-      :aria-required="required || undefined" :aria-invalid="invalid || undefined" :disabled="disabled"
+      :aria-required="required || undefined" :aria-invalid="invalid || undefined" :aria-describedby="describedBy" :disabled="disabled"
       @click="open ? close() : show()" @keydown="onEscape"
     >
       <span :class="{ 'ui-date-picker__placeholder': !selectedDate }">{{ displayValue }}</span>

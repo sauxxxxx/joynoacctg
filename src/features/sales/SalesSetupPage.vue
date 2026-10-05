@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { Plus, Search } from '@lucide/vue'
+import { accountName } from '../accounting/setup/accountSetupData'
 import CheckMark from './CheckMark.vue'
 import SalesSetupForm from './SalesSetupForm.vue'
 import { tableAmount } from './salesFormat'
@@ -27,7 +28,7 @@ const singular = computed(() => title.value.slice(0, -1).toLocaleLowerCase())
 const rows = computed(() => setupRecords.value.filter((item) => item.kind === props.pageId))
 const visibleRows = computed(() => {
   const term = query.value.trim().toLocaleLowerCase()
-  return rows.value.filter((item) => !term || [item.name, item.account, frequencyLabel(item)].some((value) => value.toLocaleLowerCase().includes(term)))
+  return rows.value.filter((item) => !term || [item.name, accountName(item.accountId), frequencyLabel(item)].some((value) => value.toLocaleLowerCase().includes(term)))
 })
 const columnCount = computed(() => ({ 'sales-payment-terms': 7, 'sales-payment-methods': 2, 'sales-discount-types': 5 })[props.pageId])
 
@@ -63,13 +64,13 @@ function done(message: string) {
                 <small v-if="!item.active && pageId !== 'sales-payment-terms'" class="sales-table__tag">Inactive</small>
               </td>
               <template v-if="pageId === 'sales-payment-terms'">
-                <td class="sales-table__number">{{ item.payments }}</td><td>{{ frequencyLabel(item) }}</td><td class="sales-table__number">{{ item.dueOn }}</td><td>{{ item.paymentDue }}</td><td>{{ item.account }}</td>
+                <td class="sales-table__number">{{ item.payments }}</td><td>{{ frequencyLabel(item) }}</td><td class="sales-table__number">{{ item.dueOn }}</td><td>{{ item.paymentDue }}</td><td>{{ accountName(item.accountId) }}</td>
                 <td class="sales-table__center"><CheckMark :value="item.active" label="Active" /></td>
               </template>
-              <td v-else-if="pageId === 'sales-payment-methods'">{{ item.account }}</td>
+              <td v-else-if="pageId === 'sales-payment-methods'">{{ accountName(item.accountId) }}</td>
               <template v-else>
                 <td>{{ item.computation }}</td><td class="sales-table__number">{{ tableAmount(item.rate) }}</td>
-                <td class="sales-table__center"><CheckMark :value="item.allowOverride" label="Allow override" /></td><td>{{ item.account }}</td>
+                <td class="sales-table__center"><CheckMark :value="item.allowOverride" label="Allow override" /></td><td>{{ accountName(item.accountId) }}</td>
               </template>
             </tr>
             <tr v-if="!visibleRows.length" class="sales-table__empty-row">

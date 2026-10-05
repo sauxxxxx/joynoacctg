@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Plus, Search } from '@lucide/vue'
+import AppSelect from '../../../components/ui/AppSelect.vue'
 import CustomerForm from './CustomerForm.vue'
 import { customerAddress, customers, type Customer } from './customerPreviewStore'
 import '../sales-pages.css'
@@ -13,6 +14,7 @@ const statusFilter = ref<StatusFilter>('all')
 const notice = ref('')
 // The form replaces the list, like the legacy full-page editors. `null` shows the list.
 const editor = ref<{ customer: Customer | null } | null>(null)
+const statusOptions = [{ value: 'all', label: 'All statuses' }, { value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }]
 
 const filteredCustomers = computed(() => {
   const term = search.value.trim().toLocaleLowerCase()
@@ -49,11 +51,7 @@ function clearFilters() {
         <div><h2>Customers</h2><p>Keep customer names, tax identifiers, and contact details ready for sales documents.</p></div>
         <div class="sales-panel__actions">
           <label class="sales-search"><Search :size="16" aria-hidden="true" /><input v-model="search" type="search" placeholder="Type to filter" aria-label="Search customers" /></label>
-          <select v-model="statusFilter" class="sales-status-filter" aria-label="Filter by status">
-            <option value="all">All statuses</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </select>
+          <AppSelect v-model="statusFilter" aria-label="Filter by status" :options="statusOptions" compact />
           <button class="sales-button sales-button--primary" type="button" @click="open(null)"><Plus :size="16" aria-hidden="true" /> Add customer</button>
         </div>
       </div>

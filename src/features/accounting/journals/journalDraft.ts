@@ -5,7 +5,7 @@ import type { GeneralJournalType, JournalPreviewEntry } from './journalPreviewDa
 import type { PurchaseJournalLine } from './purchaseJournalData'
 
 export interface JournalDraftLineInput {
-  accountName: string
+  accountId: string
   debit: string
   credit: string
   remarks: string
@@ -44,8 +44,8 @@ export function validateJournalDraft(input: JournalDraftInput, existing?: Journa
   let totalDebit = 0
   let totalCredit = 0
   for (const [index, line] of input.lines.entries()) {
-    if (!line.accountName.trim()) return { error: `Enter an account on line ${index + 1}.` }
-    if (!accounts.value.some((account) => account.active && account.name === line.accountName.trim())) {
+    if (!line.accountId.trim()) return { error: `Enter an account on line ${index + 1}.` }
+    if (!accounts.value.some((account) => account.active && account.code === line.accountId.trim())) {
       return { error: `Choose an active Chart of Accounts entry on line ${index + 1}.` }
     }
     const debitCents = amountInCents(line.debit)
@@ -54,13 +54,13 @@ export function validateJournalDraft(input: JournalDraftInput, existing?: Journa
     if ((debitCents > 0) === (creditCents > 0)) return { error: `Enter either a debit or a credit on line ${index + 1}.` }
     totalDebit += debitCents
     totalCredit += creditCents
-    lines.push({ accountName: line.accountName.trim(), debitCents, creditCents, remarks: line.remarks.trim() })
+    lines.push({ accountId: line.accountId.trim(), debitCents, creditCents, remarks: line.remarks.trim() })
   }
   if (totalDebit !== totalCredit) return { error: 'Debits and credits must balance before saving.' }
 
   return {
     entry: {
-      id: existing?.id ?? crypto.randomUUID(), journalNumber: header.data.journalNumber, referenceNumber: '',
+      id: existing?.id ?? crypto.randomUUID(), kind: 'general-journal', journalNumber: header.data.journalNumber, referenceNumber: '',
       date: header.data.date, party: '', amountCents: totalDebit, status: 'Draft',
       remarks: header.data.remarks.trim(), createdBy: 'Current session', lines, journalType: header.data.journalType,
     },

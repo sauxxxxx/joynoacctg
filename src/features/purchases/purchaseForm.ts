@@ -5,7 +5,7 @@ import { purchaseRecords, type PurchaseKind, type PurchaseRecord } from './purch
 
 export interface PurchaseLineDraft { id: string; description: string; quantity: string; unitPrice: string }
 export interface PurchaseDraft {
-  number: string; date: string; vendor: string; amount: string; tax: string; paid: string
+  number: string; date: string; vendorId: string; amount: string; tax: string; paid: string
   remarks: string; paymentMethod: string; paymentTerms: string; checkNumber: string
   month: string; year: string; period: string; payrollFrequency: string; payGroup: string; accrualJE: string
   lines: PurchaseLineDraft[]
@@ -13,11 +13,11 @@ export interface PurchaseDraft {
 
 export function emptyPurchaseDraft(): PurchaseDraft {
   const today = new Date()
-  return { number: '', date: toIsoDate(today), vendor: '', amount: '', tax: '0.00', paid: '0.00', remarks: '', paymentMethod: '', paymentTerms: '', checkNumber: '', month: String(today.getMonth() + 1).padStart(2, '0'), year: String(today.getFullYear()), period: '', payrollFrequency: '', payGroup: '', accrualJE: '', lines: [{ id: crypto.randomUUID(), description: '', quantity: '1', unitPrice: '' }] }
+  return { number: '', date: toIsoDate(today), vendorId: '', amount: '', tax: '0.00', paid: '0.00', remarks: '', paymentMethod: '', paymentTerms: '', checkNumber: '', month: String(today.getMonth() + 1).padStart(2, '0'), year: String(today.getFullYear()), period: '', payrollFrequency: '', payGroup: '', accrualJE: '', lines: [{ id: crypto.randomUUID(), description: '', quantity: '1', unitPrice: '' }] }
 }
 
 export function draftFromRecord(record: PurchaseRecord): PurchaseDraft {
-  return { number: record.number, date: record.date, vendor: record.vendor, amount: formatMoney(record.amountCents).replaceAll(',', ''), tax: formatMoney(record.taxCents).replaceAll(',', ''), paid: formatMoney(record.paidCents).replaceAll(',', ''), remarks: record.remarks, paymentMethod: record.paymentMethod, paymentTerms: record.paymentTerms, checkNumber: record.checkNumber, month: record.month, year: record.year, period: record.period, payrollFrequency: record.payrollFrequency, payGroup: record.payGroup, accrualJE: record.accrualJE, lines: record.lines.map((line) => ({ id: line.id, description: line.description, quantity: String(line.quantity), unitPrice: formatMoney(line.unitPriceCents).replaceAll(',', '') })) }
+  return { number: record.number, date: record.date, vendorId: record.vendorId, amount: formatMoney(record.amountCents).replaceAll(',', ''), tax: formatMoney(record.taxCents).replaceAll(',', ''), paid: formatMoney(record.paidCents).replaceAll(',', ''), remarks: record.remarks, paymentMethod: record.paymentMethod, paymentTerms: record.paymentTerms, checkNumber: record.checkNumber, month: record.month, year: record.year, period: record.period, payrollFrequency: record.payrollFrequency, payGroup: record.payGroup, accrualJE: record.accrualJE, lines: record.lines.map((line) => ({ id: line.id, description: line.description, quantity: String(line.quantity), unitPrice: formatMoney(line.unitPriceCents).replaceAll(',', '') })) }
 }
 
 const baseSchema = z.object({
@@ -30,7 +30,7 @@ export function validatePurchaseDraft(kind: PurchaseKind, draft: PurchaseDraft, 
   if (!base.success) return { error: base.error.issues[0]?.message ?? 'Check the record.' }
   if (purchaseRecords.value.some((item) => item.kind === kind && item.number.toLocaleLowerCase() === base.data.number.toLocaleLowerCase() && item.id !== existing?.id)) return { error: 'This reference number already exists.' }
   if (kind === 'payrolls' && (!/^\d{4}$/.test(draft.year) || !/^(0?[1-9]|1[0-2])$/.test(draft.month))) return { error: 'Enter a valid payroll month and year.' }
-  if (kind !== 'payrolls' && !draft.vendor.trim()) return { error: 'Enter a vendor or payee.' }
+  if (kind !== 'payrolls' && !draft.vendorId) return { error: 'Choose a vendor or payee.' }
   if (kind === 'purchase-receipts' && !draft.paymentMethod.trim()) return { error: 'Enter a payment method.' }
   if (kind === 'check-voucher' && !draft.checkNumber.trim()) return { error: 'Enter a check number.' }
 
@@ -61,7 +61,7 @@ export function validatePurchaseDraft(kind: PurchaseKind, draft: PurchaseDraft, 
 
   return { record: {
     id: existing?.id ?? crypto.randomUUID(), kind, number: base.data.number, date: base.data.date,
-    vendor: draft.vendor.trim(), amountCents, totalCents, paidCents, taxCents, status: 'Draft',
+    vendorId: draft.vendorId, amountCents, totalCents, paidCents, taxCents, status: 'Draft',
     remarks: draft.remarks.trim(), paymentMethod: draft.paymentMethod.trim(), paymentTerms: draft.paymentTerms.trim(),
     checkNumber: draft.checkNumber.trim(), lines, month: draft.month, year: draft.year, period: draft.period.trim(),
     payrollFrequency: draft.payrollFrequency.trim(), payGroup: draft.payGroup.trim(), accrualJE: draft.accrualJE.trim(),

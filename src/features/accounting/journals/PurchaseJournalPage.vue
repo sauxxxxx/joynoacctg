@@ -6,6 +6,7 @@ import AppDatePicker from '../../../components/ui/AppDatePicker.vue'
 import PurchaseJournalDetail from './PurchaseJournalDetail.vue'
 import PurchaseJournalTable from './PurchaseJournalTable.vue'
 import { sampleJournalRange, samplePurchaseJournalEntries, type PurchaseJournalEntry } from './purchaseJournalData'
+import { createPostedJournals, type CreateJournalInput } from '../workflows/accountingWorkflow'
 import './purchaseJournal.css'
 
 const dateRangeSchema = z.object({
@@ -24,6 +25,7 @@ const filtersOpen = ref(false)
 const filterControl = ref<HTMLElement | null>(null)
 const filterButton = ref<HTMLButtonElement | null>(null)
 const selectedIds = ref<string[]>([])
+const notice = ref('')
 const activeEntry = computed<PurchaseJournalEntry | null>(() => {
   const id = selectedIds.value.at(-1)
   return entries.value.find((entry) => entry.id === id) ?? null
@@ -33,7 +35,7 @@ const entries = computed(() => {
   const query = searchTerm.value.trim().toLocaleLowerCase()
   return samplePurchaseJournalEntries.filter((entry) => {
     const inRange = entry.date >= appliedRange.value.from && entry.date <= appliedRange.value.to
-    const matches = !query || [entry.journalNumber, entry.referenceNumber, entry.payee, entry.status, entry.remarks, entry.createdBy]
+    const matches = !query || [entry.journalNumber, entry.referenceNumber, entry.party, entry.status, entry.remarks, entry.createdBy]
       .some((value) => value.toLocaleLowerCase().includes(query))
     return inRange && matches
   })
@@ -121,6 +123,23 @@ function toggleAll() {
   const allSelected = visibleIds.every((id) => selectedIds.value.includes(id))
   selectedIds.value = allSelected ? [] : visibleIds
 }
+
+function moveToCashDisbursement() {
+  const selected = entries.value.filter((entry) => selectedIds.value.includes(entry.id))
+  try {
+    const inputs: CreateJournalInput[] = selected.map((entry) => ({
+      kind: 'cash-disbursement-journal', sourceKey: `purchase-payment:${entry.id}`,
+      referenceNumber: entry.referenceNumber, date: entry.date, party: entry.party,
+      remarks: `Payment for ${entry.remarks || entry.referenceNumber}`,
+      lines: [{ accountId: '201', debitCents: entry.amountCents, creditCents: 0 }, { accountId: '101', debitCents: 0, creditCents: entry.amountCents }],
+    }))
+    const created = createPostedJournals(inputs).filter((result) => result.created).length
+    notice.value = created ? `${created} cash disbursement ${created === 1 ? 'entry' : 'entries'} created.` : 'The selected entries were already transferred.'
+    selectedIds.value = []
+  } catch (error) {
+    notice.value = error instanceof Error ? error.message : 'The entries could not be transferred.'
+  }
+}
 </script>
 
 <template>
@@ -161,9 +180,10 @@ function toggleAll() {
             </form>
           </div>
         </div>
-        <button class="journal-button journal-button--primary" type="button" disabled title="Journal transfers are not available in this frontend preview.">Move to CDJ</button>
+        <button class="journal-button journal-button--primary" type="button" :disabled="!selectedIds.length" @click="moveToCashDisbursement">Move to CDJ</button>
       </div>
     </div>
+    <p v-if="notice" class="journal-date-filter__notice" role="status">{{ notice }}</p>
 
     <div class="journal-workarea" :class="{ 'journal-workarea--review': reviewMode }">
       <PurchaseJournalTable

@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { purchaseSetupRecordId, purchaseSetupRecords } from './setup/purchaseSetupData'
 
 export type PurchaseKind = 'purchase-invoices' | 'payrolls' | 'cash-voucher' | 'check-voucher' | 'petty-cash-voucher' | 'purchase-receipts'
 export type PurchaseStatus = 'Posted' | 'Draft'
@@ -9,7 +10,7 @@ export interface PurchaseRecord {
   kind: PurchaseKind
   number: string
   date: string
-  vendor: string
+  vendorId: string
   amountCents: number
   totalCents: number
   paidCents: number
@@ -45,7 +46,11 @@ export const purchaseConfigs: Record<PurchaseKind, PurchaseConfig> = {
 }
 
 function sample(kind: PurchaseKind, number: string, date: string, vendor: string, amountCents: number, totalCents: number, paidCents: number, remarks = '', paymentMethod = ''): PurchaseRecord {
-  return { id: `${kind}-${number}`, kind, number, date, vendor, amountCents, totalCents, paidCents, status: 'Posted', remarks, paymentMethod, paymentTerms: '', checkNumber: '', taxCents: totalCents - amountCents, lines: [], month: '', year: '', period: '', payrollFrequency: '', payGroup: '', accrualJE: '' }
+  return { id: `${kind}-${number}`, kind, number, date, vendorId: purchaseSetupRecordId('vendors', vendor), amountCents, totalCents, paidCents, status: 'Posted', remarks, paymentMethod, paymentTerms: '', checkNumber: '', taxCents: totalCents - amountCents, lines: [], month: '', year: '', period: '', payrollFrequency: '', payGroup: '', accrualJE: '' }
+}
+
+export function purchaseVendorName(vendorId: string) {
+  return purchaseSetupRecords.value.find((record) => record.kind === 'vendors' && record.id === vendorId)?.name ?? 'Unknown vendor'
 }
 
 // Only rows whose values are visible in the supplied screenshots. No missing records or totals are fabricated.

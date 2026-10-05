@@ -46,7 +46,7 @@ export interface RecordingSettings {
 export interface AccountMapping {
   id: string
   label: string
-  account: string
+  accountId: string
   description: string
 }
 
@@ -141,8 +141,8 @@ export interface CompanyItem {
   name: string
   description: string
   unit: string
-  sellingPrice: number
-  cost: number
+  sellingPriceCents: number
+  costCents: number
   category: string
   active: boolean
 }
@@ -233,44 +233,44 @@ export const taxSettings = ref<TaxSettings>({
   availsTaxRelief: false, taxReliefDetails: '',
 })
 
-const mapping = (label: string, account: string, description: string): AccountMapping => ({ id: crypto.randomUUID(), label, account, description })
+const mapping = (label: string, accountId: string, description: string): AccountMapping => ({ id: crypto.randomUUID(), label, accountId, description })
 /**
  * Default account mapping from the legacy system. Account names are placeholders until they are
  * matched to accounts in Accounting › Chart of Accounts.
  */
 export const accountMappings = ref<AccountMapping[]>([
-  mapping('Sales Discount', 'Sales Discount', 'Account for all discounts in sales'),
-  mapping('Output Tax', 'Output Tax', 'Account used for all accumulated VAT in sales'),
-  mapping('Vatable Sales', 'Sales', 'Account used for all vatable sales'),
-  mapping('Exempt Sales', 'Sales', 'Account used for all VAT-exempt sales'),
-  mapping('Zero Rated Sales', 'Sales', 'Account used for all zero-rated sales'),
-  mapping('Non Vatable Sales', 'Sales', 'Account used for all non-vatable sales'),
-  mapping('Purchase Discount', 'Purchase Discount', 'Account for all discounts in purchases'),
-  mapping('Input Tax', 'Input Tax', 'Account used for all VAT in purchases'),
-  mapping('Vatable Purchases', 'Purchases', 'Account used for all vatable purchases'),
-  mapping('Exempt Purchases', 'Purchases', 'Account used for all VAT-exempt purchases'),
-  mapping('Zero Rated Purchases', 'Purchases', 'Account used for all zero-rated purchases'),
-  mapping('Non Vatable Purchases', 'Purchases', 'Account used for all non-vatable purchases'),
-  mapping('Creditable Withholding Tax', 'Creditable Withholding Tax', 'Account used for all creditable withholding tax on sales'),
-  mapping('Deferred Input Tax', 'Deferred Input Tax', 'Account used when deferring recognition of input tax'),
-  mapping('Deferred Output Tax', 'Deferred Output Tax', 'Account used when deferring recognition of output tax'),
-  mapping('Expanded Withholding Tax', 'Withholding Tax Payable - Expanded', 'Account used for all taxes withheld on purchases'),
-  mapping('Other Non-deductible Expenses', 'Other Non-deductible', 'For recording expenses with no valid source documents'),
-  mapping('Deferred WTAX', 'Deferred Withholding Tax', 'Account used when deferring recognition of withholding tax'),
-  mapping('Depreciation Expense', 'Depreciation Expense', 'To account for depreciation expenses of fixed assets'),
-  mapping('Withholding Tax Payable - Final', 'Withholding Tax Payable - Final', 'Account used for all final taxes withheld on purchases'),
-  mapping('Taxes and Licenses', 'Taxes and Licenses', 'Business taxes, registration, and licensing fees paid to the government'),
-  mapping('Income Tax Expense', 'Income Tax Expense', 'Account used for all income tax expense'),
-  mapping('Creditable Income Tax', 'Creditable Income Tax', 'Account used for all creditable income tax on sales'),
-  mapping('Income Tax Payable', 'Income Tax Payable', 'Account used for all income tax payable on sales'),
-  mapping('VAT Payable', 'VAT Payable', 'Account used for all VAT payable on sales'),
-  mapping('Cash', 'Cash', 'Account for all cash transactions'),
-  mapping('Revolving Cash Fund', 'Petty Cash Fund', 'Default account for a revolving fund'),
-  mapping('Creditable Input Tax', 'Creditable Input Tax', 'Used to record the excess of input taxes (VAT from purchases)'),
-  mapping('Prepaid Expenses', 'Prepaid Expenses', 'Used to record expenses from vouchers without valid supporting documents'),
-  mapping('BIR Penalties', 'BIR Penalties', 'Account used for all tax penalties'),
-  mapping('Percentage Tax Payable', 'Percentage Tax Payable', 'Account used for all percentage tax returns'),
-  mapping('Withholding Tax Payable for Compensation', 'Withholding Tax Payable - Compensation', 'Account used for all taxes withheld on compensation'),
+  mapping('Sales Discount', '402', 'Account for all discounts in sales'),
+  mapping('Output Tax', '202', 'Account used for all accumulated VAT in sales'),
+  mapping('Vatable Sales', '401', 'Account used for all vatable sales'),
+  mapping('Exempt Sales', '401', 'Account used for all VAT-exempt sales'),
+  mapping('Zero Rated Sales', '401', 'Account used for all zero-rated sales'),
+  mapping('Non Vatable Sales', '401', 'Account used for all non-vatable sales'),
+  mapping('Purchase Discount', '555', 'Account for all discounts in purchases'),
+  mapping('Input Tax', '114', 'Account used for all VAT in purchases'),
+  mapping('Vatable Purchases', '550', 'Account used for all vatable purchases'),
+  mapping('Exempt Purchases', '550', 'Account used for all VAT-exempt purchases'),
+  mapping('Zero Rated Purchases', '550', 'Account used for all zero-rated purchases'),
+  mapping('Non Vatable Purchases', '550', 'Account used for all non-vatable purchases'),
+  mapping('Creditable Withholding Tax', '115', 'Account used for all creditable withholding tax on sales'),
+  mapping('Deferred Input Tax', '', 'Account used when deferring recognition of input tax'),
+  mapping('Deferred Output Tax', '', 'Account used when deferring recognition of output tax'),
+  mapping('Expanded Withholding Tax', '', 'Account used for all taxes withheld on purchases'),
+  mapping('Other Non-deductible Expenses', '', 'For recording expenses with no valid source documents'),
+  mapping('Deferred WTAX', '', 'Account used when deferring recognition of withholding tax'),
+  mapping('Depreciation Expense', '', 'To account for depreciation expenses of fixed assets'),
+  mapping('Withholding Tax Payable - Final', '', 'Account used for all final taxes withheld on purchases'),
+  mapping('Taxes and Licenses', '', 'Business taxes, registration, and licensing fees paid to the government'),
+  mapping('Income Tax Expense', '', 'Account used for all income tax expense'),
+  mapping('Creditable Income Tax', '', 'Account used for all creditable income tax on sales'),
+  mapping('Income Tax Payable', '', 'Account used for all income tax payable on sales'),
+  mapping('VAT Payable', '202', 'Account used for all VAT payable on sales'),
+  mapping('Cash', '101', 'Account for all cash transactions'),
+  mapping('Revolving Cash Fund', '102', 'Default account for a revolving fund'),
+  mapping('Creditable Input Tax', '114', 'Used to record the excess of input taxes (VAT from purchases)'),
+  mapping('Prepaid Expenses', '113', 'Used to record expenses from vouchers without valid supporting documents'),
+  mapping('BIR Penalties', '', 'Account used for all tax penalties'),
+  mapping('Percentage Tax Payable', '', 'Account used for all percentage tax returns'),
+  mapping('Withholding Tax Payable for Compensation', '', 'Account used for all taxes withheld on compensation'),
   mapping('Creditable VAT', 'Creditable VAT', 'Used to record VAT withheld from sales'),
 ])
 

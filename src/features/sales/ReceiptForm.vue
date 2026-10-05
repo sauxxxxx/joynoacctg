@@ -3,6 +3,8 @@ import { computed, nextTick, ref } from 'vue'
 import { Minus, Plus, Trash2, UserPlus } from '@lucide/vue'
 import AppDatePicker from '../../components/ui/AppDatePicker.vue'
 import AppSelect from '../../components/ui/AppSelect.vue'
+import { decimalToCents } from '../../lib/money'
+import { salesDocumentRepository } from '../../services/previewRepositories'
 import { formatSeriesNumber } from '../company/companyRecords'
 import { documentSeries, recordAudit } from '../company/companyStore'
 import { customers } from './customers/customerPreviewStore'
@@ -10,7 +12,7 @@ import QuickAddDialogs from './QuickAddDialogs.vue'
 import SalesEditorShell from './SalesEditorShell.vue'
 import { tableAmount } from './salesFormat'
 import { salesDocuments, setupRecords, type DocumentKind, type PaymentRow, type SalesDocument } from './salesPreviewStore'
-import { invoiceBalance } from './salesRules'
+import { invoiceBalanceCents } from './salesRules'
 import './sales-pages.css'
 
 const props = defineProps<{ kind: Exclude<DocumentKind, 'sales-invoices'>; receipt: SalesDocument | null }>()
@@ -30,16 +32,20 @@ const suggestedNumber = props.receipt || !series.value ? '' : formatSeriesNumber
 // Collection receipts default to Cash, as in the legacy form; acknowledgement receipts start blank.
 const defaultMethod = isAck ? '' : setupRecords.value.find((item) => item.kind === 'sales-payment-methods' && item.active && item.name.trim().toLocaleLowerCase() === 'cash')?.id ?? ''
 
-function blank(): SalesDocument {
+type PaymentDraft = Omit<PaymentRow, 'amountCents'> & { amount: number }
+type ReceiptDraft = Omit<SalesDocument, 'payments'> & { payments: PaymentDraft[] }
+
+function blank(): ReceiptDraft {
   return {
     id: '', kind: props.kind, number: suggestedNumber, date: today(), customerId: '', status: isAck ? 'Issued' : 'Posted',
-    paymentTermId: '', paymentMethodId: defaultMethod, dueDate: '', amount: 0, remarks: '',
+    paymentTermId: '', paymentMethodId: defaultMethod, dueDate: '', amountCents: 0, remarks: '',
     customerDetails: { customerType: 'Company', company: '', tin: '', street: '', locality: '', country: 'Philippines', zipCode: '' },
-    discountTypeId: '', discountRate: 0, lines: [], payments: [], withInvoice: !isAck,
+    discountTypeId: '', discountRate: 0, discountAmountCents: 0, lines: [], payments: [], withInvoice: !isAck,
   }
 }
 
-const draft = ref<SalesDocument>(props.receipt ? clone(props.receipt) : blank())
+const asDraft = (receipt: SalesDocument): ReceiptDraft => ({ ...clone(receipt), payments: receipt.payments.map((row) => ({ ...row, amount: row.amountCents / 100 })) })
+const draft = ref<ReceiptDraft>(props.receipt ? asDraft(props.receipt) : blank())
 const initial = JSON.stringify(draft.value)
 const dirty = computed(() => JSON.stringify(draft.value) !== initial)
 const submitted = ref(false)
@@ -59,24 +65,24 @@ const methodOptions = computed(() => setupRecords.value
 /** Everything else on file, so the balance an invoice offers does not count this receipt's own earlier payment. */
 const otherDocuments = computed(() => salesDocuments.value.filter((doc) => doc.id !== draft.value.id))
 const customerInvoices = computed(() => salesDocuments.value.filter((doc) => doc.kind === 'sales-invoices' && doc.customerId === draft.value.customerId && !['Draft', 'Cancelled'].includes(doc.status)))
-const availableFor = (invoice: SalesDocument) => invoiceBalance(otherDocuments.value, invoice)
+const availableFor = (invoice: SalesDocument) => invoiceBalanceCents(otherDocuments.value, invoice)
 const invoiceOptionsFor = (rowInvoiceId: string) => customerInvoices.value
   .filter((invoice) => invoice.id === rowInvoiceId || (availableFor(invoice) > 0 && !draft.value.payments.some((row) => row.invoiceId === invoice.id)))
-  .map((invoice) => ({ id: invoice.id, text: isAck ? `${invoice.number}` : `${invoice.number} · balance ${tableAmount(availableFor(invoice))}` }))
+  .map((invoice) => ({ value: invoice.id, label: isAck ? `${invoice.number}` : `${invoice.number} · balance ${tableAmount(availableFor(invoice))}` }))
 
-const total = computed(() => Math.round(draft.value.payments.reduce((sum, row) => sum + (Number(row.amount) || 0), 0) * 100) / 100)
+const totalCents = computed(() => draft.value.payments.reduce((sum, row) => sum + (decimalToCents(row.amount) ?? 0), 0))
 const allSelected = computed(() => draft.value.payments.length > 0 && draft.value.payments.every((row) => selectedRows.value.includes(row.id)))
 
 const rowErrors = computed(() => {
   const found: Record<string, string> = {}
   draft.value.payments.forEach((row, index) => {
-    const amount = Number(row.amount)
+    const amount = decimalToCents(row.amount) ?? 0
     if (showInvoiceColumn.value && !row.invoiceId) found[row.id] = `Row ${index + 1}: choose an invoice`
     else if (!showInvoiceColumn.value && !row.others.trim()) found[row.id] = `Row ${index + 1}: describe what this payment is for`
-    else if (!(amount > 0)) found[row.id] = `Row ${index + 1}: enter an amount above zero`
+    else if (amount <= 0) found[row.id] = `Row ${index + 1}: enter an amount above zero`
     else if (!isAck && row.invoiceId) {
       const invoice = customerInvoices.value.find((item) => item.id === row.invoiceId)
-      if (invoice && amount > availableFor(invoice) + 0.005) found[row.id] = `Row ${index + 1}: ${invoice.number} only has ${tableAmount(availableFor(invoice))} left to collect`
+      if (invoice && amount > availableFor(invoice)) found[row.id] = `Row ${index + 1}: ${invoice.number} only has ${tableAmount(availableFor(invoice))} left to collect`
     }
   })
   return found
@@ -101,7 +107,7 @@ const errors = computed(() => {
 const shown = (key: string) => submitted.value ? errors.value[key] : ''
 
 function addRow() {
-  const row: PaymentRow = { id: crypto.randomUUID(), invoiceId: '', others: '', amount: 0 }
+  const row: PaymentDraft = { id: crypto.randomUUID(), invoiceId: '', others: '', amount: 0 }
   draft.value.payments.push(row)
   nextTick(() => document.getElementById(`payment-row-${row.id}`)?.focus())
 }
@@ -112,10 +118,10 @@ function removeSelected() {
 function toggleRow(id: string) {
   selectedRows.value = selectedRows.value.includes(id) ? selectedRows.value.filter((value) => value !== id) : [...selectedRows.value, id]
 }
-function chooseInvoice(row: PaymentRow) {
+function chooseInvoice(row: PaymentDraft) {
   const invoice = customerInvoices.value.find((item) => item.id === row.invoiceId)
   // Offer the remaining balance as the amount, which is what most receipts pay.
-  if (invoice && !isAck && !(Number(row.amount) > 0)) row.amount = availableFor(invoice)
+  if (invoice && !isAck && !(Number(row.amount) > 0)) row.amount = availableFor(invoice) / 100
 }
 function chooseCustomer(id: string) {
   if (draft.value.customerId && draft.value.customerId !== id) {
@@ -125,7 +131,7 @@ function chooseCustomer(id: string) {
   draft.value.customerId = id
 }
 
-function save() {
+async function save() {
   submitted.value = true
   const first = Object.values(errors.value)[0] ?? Object.values(rowErrors.value)[0]
   saveError.value = first ? `Please fix the highlighted fields.` : ''
@@ -136,26 +142,26 @@ function save() {
     id: draft.value.id || crypto.randomUUID(),
     number: draft.value.number.trim(),
     remarks: draft.value.remarks.trim(),
-    amount: total.value,
+    amountCents: totalCents.value,
     payments: draft.value.payments.map((row) => ({
-      ...row,
-      amount: Math.round(Number(row.amount) * 100) / 100,
+      id: row.id,
+      amountCents: decimalToCents(row.amount) ?? 0,
       invoiceId: showInvoiceColumn.value ? row.invoiceId : '',
       others: showInvoiceColumn.value ? '' : row.others.trim(),
     })),
   }
-  salesDocuments.value = isNew ? [...salesDocuments.value, receipt] : salesDocuments.value.map((doc) => doc.id === receipt.id ? receipt : doc)
+  await salesDocumentRepository.save(receipt)
   const active = series.value
   if (isNew && active && receipt.number === suggestedNumber) {
     documentSeries.value = documentSeries.value.map((item) => item.id === active.id ? { ...item, nextNumber: item.nextNumber + 1 } : item)
   }
-  recordAudit('Sales', isNew ? 'Created' : 'Updated', `${label}: ${receipt.number}`, tableAmount(receipt.amount))
+  recordAudit('Sales', isNew ? 'Created' : 'Updated', `${label}: ${receipt.number}`, tableAmount(receipt.amountCents))
   emit('saved', `${label} ${receipt.number} ${isNew ? 'added' : 'updated'}.`)
 }
 
-function remove() {
+async function remove() {
   const number = draft.value.number
-  salesDocuments.value = salesDocuments.value.filter((doc) => doc.id !== draft.value.id)
+  await salesDocumentRepository.remove(draft.value.id)
   recordAudit('Sales', 'Deleted', `${label}: ${number}`)
   deleteDialog.value?.close()
   emit('deleted', `${label} ${number} deleted.`)
@@ -204,17 +210,14 @@ function remove() {
             <tr v-for="(row, index) in draft.payments" :key="row.id" :class="{ 'sales-lines-grid__row--selected': selectedRows.includes(row.id), 'sales-lines-grid__row--error': submitted && rowErrors[row.id] }">
               <td class="sales-lines-grid__select"><input type="checkbox" :checked="selectedRows.includes(row.id)" :aria-label="`Select row ${index + 1}`" @change="toggleRow(row.id)" /></td>
               <td>
-                <select v-if="showInvoiceColumn" :id="`payment-row-${row.id}`" v-model="row.invoiceId" :aria-label="`Row ${index + 1} invoice`" @change="chooseInvoice(row)">
-                  <option value="">{{ draft.customerId ? (invoiceOptionsFor(row.invoiceId).length ? 'Select invoice' : 'No open invoices for this customer') : 'Choose a customer first' }}</option>
-                  <option v-for="option in invoiceOptionsFor(row.invoiceId)" :key="option.id" :value="option.id">{{ option.text }}</option>
-                </select>
+                <AppSelect v-if="showInvoiceColumn" :id="`payment-row-${row.id}`" :model-value="row.invoiceId" :aria-label="`Row ${index + 1} invoice`" :placeholder="draft.customerId ? (invoiceOptionsFor(row.invoiceId).length ? 'Select invoice' : 'No open invoices for this customer') : 'Choose a customer first'" :options="invoiceOptionsFor(row.invoiceId)" compact @update:model-value="row.invoiceId = $event; chooseInvoice(row)" />
                 <input v-else :id="`payment-row-${row.id}`" v-model="row.others" maxlength="160" :aria-label="`Row ${index + 1} description`" placeholder="What is this payment for?" />
               </td>
               <td><input v-model.number="row.amount" class="sales-lines-grid__number" type="number" min="0" step="0.01" :aria-label="`Row ${index + 1} amount`" /></td>
             </tr>
             <tr v-if="!draft.payments.length" class="sales-table__empty-row sales-lines-grid__empty"><td colspan="3"><strong>No rows to show</strong><span>Use + to add a row.</span></td></tr>
           </tbody>
-          <tfoot><tr><td /><td /><td class="sales-table__number">{{ tableAmount(total) }}</td></tr></tfoot>
+          <tfoot><tr><td /><td /><td class="sales-table__number">{{ tableAmount(totalCents) }}</td></tr></tfoot>
         </table>
       </div>
       <p v-if="shown('payments')" class="sales-field-error sales-card__error">{{ shown('payments') }}</p>

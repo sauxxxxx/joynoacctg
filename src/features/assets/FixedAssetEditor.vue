@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { Info, Trash2, X } from '@lucide/vue'
 import AppDatePicker from '../../components/ui/AppDatePicker.vue'
+import AppSelect, { type SelectOption } from '../../components/ui/AppSelect.vue'
 import { formatMoney, parseMoneyToCents } from '../../lib/money'
 import { emptyFixedAsset, type FixedAssetRecord } from './fixedAssetData'
+import { purchaseSetupRecords } from '../purchases/setup/purchaseSetupData'
+import { goods } from '../company/companyStore'
 
 const props = defineProps<{ open: boolean; record: FixedAssetRecord | null }>()
 const emit = defineEmits<{ close: []; save: [record: FixedAssetRecord]; delete: [record: FixedAssetRecord] }>()
@@ -13,6 +16,12 @@ const purchasePrice = ref('0.00')
 const vat = ref('0.00')
 const salvageValue = ref('0.00')
 const error = ref('')
+const vendorOptions = computed<SelectOption[]>(() => purchaseSetupRecords.value
+  .filter((record) => record.kind === 'vendors' && record.active)
+  .map((record) => ({ value: record.id, label: record.name })))
+const itemOptions = computed<SelectOption[]>(() => goods.value
+  .filter((item) => item.active || item.id === draft.value.itemId)
+  .map((item) => ({ value: item.id, label: `${item.code} · ${item.name}` })))
 
 watch(() => [props.open, props.record] as const, async ([open]) => {
   draft.value = props.record ? { ...props.record } : emptyFixedAsset()
@@ -31,7 +40,7 @@ function save() {
   const salvageValueCents = parseMoneyToCents(salvageValue.value)
   if (!draft.value.datePurchased) { error.value = 'Choose the purchase date.'; return }
   if (!draft.value.description.trim()) { error.value = 'Enter an asset description.'; return }
-  if (!draft.value.vendor.trim()) { error.value = 'Enter the vendor.'; return }
+  if (!draft.value.vendorId) { error.value = 'Choose the vendor.'; return }
   if (purchasePriceCents === null || purchasePriceCents < 0) { error.value = 'Enter a valid purchase price.'; return }
   if (vatCents === null || vatCents < 0) { error.value = 'Enter a valid VAT amount.'; return }
   if (salvageValueCents === null || salvageValueCents < 0) { error.value = 'Enter a valid salvage value.'; return }
@@ -40,8 +49,8 @@ function save() {
   if (!Number.isInteger(draft.value.lapsedMonths) || draft.value.lapsedMonths < 0) { error.value = 'Lapsed months must be zero or greater.'; return }
   emit('save', {
     ...draft.value, id: draft.value.id || crypto.randomUUID(), purchasePriceCents, vatCents, salvageValueCents,
-    trackingNumber: draft.value.trackingNumber.trim(), description: draft.value.description.trim(), vendor: draft.value.vendor.trim(),
-    goods: draft.value.goods.trim(), salesInvoice: draft.value.salesInvoice.trim(), remarks: draft.value.remarks.trim(),
+    trackingNumber: draft.value.trackingNumber.trim(), description: draft.value.description.trim(),
+    itemId: draft.value.itemId, salesInvoice: draft.value.salesInvoice.trim(), remarks: draft.value.remarks.trim(),
   })
   emit('close')
 }
@@ -56,7 +65,7 @@ function save() {
         <section><h3>Details</h3><div class="asset-editor__grid">
           <label>Asset tracking #<input v-model="draft.trackingNumber" maxlength="80" /></label><AppDatePicker v-model="draft.datePurchased" label="Date purchased" required :invalid="Boolean(error && !draft.datePurchased)" />
           <label class="asset-editor__wide">Description <span>*</span><input v-model="draft.description" maxlength="180" /></label>
-          <label>Vendor <span>*</span><input v-model="draft.vendor" maxlength="140" /></label><label>Goods<input v-model="draft.goods" maxlength="140" /></label>
+          <AppSelect id="fixed-asset-vendor" v-model="draft.vendorId" label="Vendor" required placeholder="Choose vendor" :options="vendorOptions" :invalid="Boolean(error && !draft.vendorId)" /><AppSelect id="fixed-asset-item" v-model="draft.itemId" label="Goods" placeholder="Choose goods" :options="itemOptions" />
           <label>Purchase price <span>*</span><input v-model="purchasePrice" inputmode="decimal" /></label><label>VAT <span>*</span><input v-model="vat" inputmode="decimal" /></label>
           <label>Useful life (months) <span>*</span><input v-model.number="draft.usefulLifeMonths" type="number" min="1" step="1" /></label><label>Salvage value <span>*</span><input v-model="salvageValue" inputmode="decimal" /></label>
           <AppDatePicker v-model="draft.warrantyExpirationDate" label="Warranty expiration date" /><label class="asset-editor__wide">Remarks<textarea v-model="draft.remarks" rows="3" maxlength="300" /></label>

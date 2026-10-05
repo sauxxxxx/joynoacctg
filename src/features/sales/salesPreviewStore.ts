@@ -8,7 +8,7 @@ export interface SetupRecord {
   kind: SetupKind
   name: string
   active: boolean
-  account: string
+  accountId: string
   /** Payment terms: number of installments (1 = a single payment). */
   payments: number
   /** Payment terms: the first (or only) payment is due this many units after the invoice date. */
@@ -26,16 +26,17 @@ export type DocumentKind = 'sales-invoices' | 'sales-receipts' | 'acknowledgemen
 
 export interface SalesLineItem {
   id: string
+  itemId: string
   description: string
   quantity: number
-  unitPrice: number
+  unitPriceCents: number
   withholdingTaxCode: string
-  withholdingTaxAmount: number
+  withholdingTaxCents: number
   vatCode: string
   vatType: string
-  vatAmount: number
+  vatCents: number
   /** Creditable VAT (CVAT), entered as shown on the source invoice. */
-  creditableVatAmount: number
+  creditableVatCents: number
 }
 
 /** One row of a receipt's "for the following invoices" table or an acknowledgement receipt's payment details. */
@@ -45,7 +46,7 @@ export interface PaymentRow {
   invoiceId: string
   /** Free-text description when the row is not tied to an invoice (acknowledgement receipts only). */
   others: string
-  amount: number
+  amountCents: number
 }
 
 export interface InvoiceCustomerDetails {
@@ -69,11 +70,13 @@ export interface SalesDocument {
   paymentTermId: string
   paymentMethodId: string
   dueDate: string
-  amount: number
+  amountCents: number
   remarks: string
   customerDetails: InvoiceCustomerDetails
   discountTypeId: string
+  /** Percentage rate only. Fixed discounts use discountAmountCents. */
   discountRate: number
+  discountAmountCents: number
   lines: SalesLineItem[]
   /** Receipts and acknowledgement receipts. */
   payments: PaymentRow[]

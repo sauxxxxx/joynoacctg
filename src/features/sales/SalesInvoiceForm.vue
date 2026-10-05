@@ -3,6 +3,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Minus, Plus, Settings2, UserPlus } from '@lucide/vue'
 import AppDatePicker from '../../components/ui/AppDatePicker.vue'
 import AppSelect from '../../components/ui/AppSelect.vue'
+import { decimalToCents } from '../../lib/money'
+import { salesDocumentRepository } from '../../services/previewRepositories'
 import { formatSeriesNumber } from '../company/companyRecords'
 import { documentSeries, goods, otherItems, recordAudit, services } from '../company/companyStore'
 import { customers } from './customers/customerPreviewStore'
@@ -10,7 +12,8 @@ import QuickAddDialogs from './QuickAddDialogs.vue'
 import SalesEditorShell from './SalesEditorShell.vue'
 import { reportDate, tableAmount } from './salesFormat'
 import { salesDocuments, setupRecords, type SalesDocument, type SalesLineItem } from './salesPreviewStore'
-import { computeDueDate, lineAmount } from './salesRules'
+import { toInvoiceDraft, type SalesInvoiceDraft, type SalesLineDraft } from './salesFormTypes'
+import { calculateDiscountCents, computeDueDate, summarizeSalesLines } from './salesRules'
 import './sales-pages.css'
 
 const props = defineProps<{ invoice: SalesDocument | null }>()
@@ -26,16 +29,16 @@ const suggestedNumber = props.invoice ? '' : invoiceSeries.value ? formatSeriesN
 // Like the legacy form, a new invoice starts on the first active payment term.
 const defaultTermId = props.invoice ? '' : setupRecords.value.find((item) => item.kind === 'sales-payment-terms' && item.active)?.id ?? ''
 
-function blankInvoice(): SalesDocument {
+function blankInvoice(): SalesInvoiceDraft {
   return {
     id: '', kind: 'sales-invoices', number: suggestedNumber, date: today(), customerId: '', status: 'Unpaid',
-    paymentTermId: defaultTermId, paymentMethodId: '', dueDate: '', amount: 0, remarks: '',
+    paymentTermId: defaultTermId, paymentMethodId: '', dueDate: '', amountCents: 0, remarks: '',
     customerDetails: { customerType: 'Company', company: '', tin: '', street: '', locality: '', country: 'Philippines', zipCode: '' },
-    discountTypeId: '', discountRate: 0, lines: [], payments: [], withInvoice: false,
+    discountTypeId: '', discountRate: 0, discountAmountCents: 0, discountInput: 0, lines: [], payments: [], withInvoice: false,
   }
 }
 
-const draft = ref<SalesDocument>(props.invoice ? clone(props.invoice) : blankInvoice())
+const draft = ref<SalesInvoiceDraft>(props.invoice ? toInvoiceDraft(props.invoice) : blankInvoice())
 const initial = JSON.stringify(draft.value)
 const dirty = computed(() => JSON.stringify(draft.value) !== initial)
 const submitted = ref(false)
@@ -55,7 +58,7 @@ const optionRows: { key: 'discount' | 'wtax' | 'vat'; label: string }[] = [
 function setOption(key: 'discount' | 'wtax' | 'vat', on: boolean) {
   options.value[key] = on
   // A hidden discount must not keep applying silently.
-  if (key === 'discount' && !on) { draft.value.discountTypeId = ''; draft.value.discountRate = 0 }
+  if (key === 'discount' && !on) { draft.value.discountTypeId = ''; draft.value.discountInput = 0 }
 }
 function onPointerDown(event: PointerEvent) {
   if (optionsOpen.value && optionsRoot.value && !optionsRoot.value.contains(event.target as Node)) optionsOpen.value = false
@@ -92,20 +95,21 @@ const catalog = computed(() => [...goods.value, ...services.value, ...otherItems
  * Assumption pending confirmation: a line's Total Amount is quantity × unit price, before discount and tax.
  * WTAX, VAT, and CVAT are entered as shown on the source invoice and do not change the invoice total.
  */
-const totals = computed(() => draft.value.lines.reduce((sum, line) => ({
-  quantity: sum.quantity + (Number(line.quantity) || 0),
-  withholding: sum.withholding + (Number(line.withholdingTaxAmount) || 0),
-  vat: sum.vat + (Number(line.vatAmount) || 0),
-  cvat: sum.cvat + (Number(line.creditableVatAmount) || 0),
-  amount: sum.amount + lineAmount(line),
-}), { quantity: 0, withholding: 0, vat: 0, cvat: 0, amount: 0 }))
-const discountAmount = computed(() => {
+const totals = computed(() => summarizeSalesLines(draft.value.lines.map((line) => ({
+  quantity: line.quantity,
+  unitPriceCents: decimalToCents(line.unitPrice) ?? 0,
+  withholdingTaxCents: decimalToCents(line.withholdingTaxAmount) ?? 0,
+  vatCents: decimalToCents(line.vatAmount) ?? 0,
+  creditableVatCents: decimalToCents(line.creditableVatAmount) ?? 0,
+}))))
+const draftLineAmountCents = (line: SalesLineDraft) => Math.round((Number(line.quantity) || 0) * (decimalToCents(line.unitPrice) ?? 0))
+const discountAmountCents = computed(() => {
   if (!selectedDiscount.value) return 0
-  const rate = Number(draft.value.discountRate) || 0
-  const value = selectedDiscount.value.computation === 'Percentage' ? totals.value.amount * rate / 100 : rate
-  return Math.min(totals.value.amount, Math.max(0, value))
+  const input = Number(draft.value.discountInput) || 0
+  const value = selectedDiscount.value.computation === 'Percentage' ? input : decimalToCents(input) ?? 0
+  return calculateDiscountCents(totals.value.amountCents, selectedDiscount.value.computation, value)
 })
-const invoiceTotal = computed(() => Math.round(Math.max(0, totals.value.amount - discountAmount.value) * 100) / 100)
+const invoiceTotalCents = computed(() => Math.max(0, totals.value.amountCents - discountAmountCents.value))
 const allSelected = computed(() => draft.value.lines.length > 0 && draft.value.lines.every((line) => selectedLines.value.includes(line.id)))
 const customerTypeOptions = [{ value: 'Company', label: 'Company' }, { value: 'Individual', label: 'Individual' }]
 const columnCount = computed(() => 5 + (options.value.wtax ? 2 : 0) + (options.value.vat ? 4 : 0))
@@ -120,7 +124,7 @@ const errors = computed(() => {
   if (!customers.value.some((customer) => customer.id === invoice.customerId)) found.customerId = 'Choose a customer'
   if (!selectedTerm.value) found.paymentTermId = 'Choose a payment term'
   if (!invoice.lines.length) found.lines = 'Add at least one line item'
-  if (selectedDiscount.value?.computation === 'Percentage' && Number(invoice.discountRate) > 100) found.discount = 'A percentage discount cannot exceed 100'
+  if (selectedDiscount.value?.computation === 'Percentage' && Number(invoice.discountInput) > 100) found.discount = 'A percentage discount cannot exceed 100'
   return found
 })
 const lineErrors = computed(() => {
@@ -135,8 +139,8 @@ const lineErrors = computed(() => {
 const shown = (key: string) => submitted.value ? errors.value[key] : ''
 
 function addLine() {
-  const line: SalesLineItem = {
-    id: crypto.randomUUID(), description: '', quantity: 1, unitPrice: 0, withholdingTaxCode: '', withholdingTaxAmount: 0,
+  const line: SalesLineDraft = {
+    id: crypto.randomUUID(), itemId: '', description: '', quantity: 1, unitPrice: 0, withholdingTaxCode: '', withholdingTaxAmount: 0,
     vatCode: '', vatType: '', vatAmount: 0, creditableVatAmount: 0,
   }
   draft.value.lines.push(line)
@@ -149,9 +153,10 @@ function removeSelected() {
 function toggleLine(id: string) {
   selectedLines.value = selectedLines.value.includes(id) ? selectedLines.value.filter((item) => item !== id) : [...selectedLines.value, id]
 }
-function useCatalogPrice(line: SalesLineItem) {
+function useCatalogPrice(line: SalesLineDraft) {
   const match = catalog.value.find((item) => item.name.toLocaleLowerCase() === line.description.trim().toLocaleLowerCase())
-  if (match && !line.unitPrice) line.unitPrice = match.sellingPrice
+  line.itemId = match?.id ?? ''
+  if (match && !line.unitPrice) line.unitPrice = match.sellingPriceCents / 100
 }
 function chooseCustomer(id: string) {
   draft.value.customerId = id
@@ -164,17 +169,25 @@ function chooseCustomer(id: string) {
 }
 function chooseDiscount(id: string) {
   draft.value.discountTypeId = id
-  draft.value.discountRate = discounts.value.find((item) => item.id === id)?.rate ?? 0
+  draft.value.discountInput = discounts.value.find((item) => item.id === id)?.rate ?? 0
 }
 
-function save() {
+async function save() {
   submitted.value = true
   const first = Object.values(errors.value)[0] ?? Object.values(lineErrors.value)[0]
   saveError.value = first ? `Please fix the highlighted fields.` : ''
   if (first) return
   const isNew = !draft.value.id
+  const percentageDiscount = selectedDiscount.value?.computation === 'Percentage'
+  const lines: SalesLineItem[] = draft.value.lines.map((line) => ({
+    id: line.id, itemId: line.itemId, description: line.description.trim(), quantity: line.quantity,
+    unitPriceCents: decimalToCents(line.unitPrice) ?? 0,
+    withholdingTaxCode: line.withholdingTaxCode, withholdingTaxCents: decimalToCents(line.withholdingTaxAmount) ?? 0,
+    vatCode: line.vatCode, vatType: line.vatType, vatCents: decimalToCents(line.vatAmount) ?? 0,
+    creditableVatCents: decimalToCents(line.creditableVatAmount) ?? 0,
+  }))
   const invoice: SalesDocument = {
-    ...clone(draft.value),
+    ...clone(draft.value), lines,
     id: draft.value.id || crypto.randomUUID(),
     number: draft.value.number.trim(),
     remarks: draft.value.remarks.trim(),
@@ -182,15 +195,17 @@ function save() {
     status: draft.value.status === 'Cancelled' ? 'Cancelled' : 'Unpaid',
     dueDate: dueDate.value,
     paymentMethodId: '',
-    amount: invoiceTotal.value,
-    lines: draft.value.lines.map((line) => ({ ...line, description: line.description.trim() })),
+    amountCents: invoiceTotalCents.value,
+    discountRate: percentageDiscount ? Number(draft.value.discountInput) || 0 : 0,
+    discountAmountCents: percentageDiscount ? 0 : discountAmountCents.value,
   }
-  salesDocuments.value = isNew ? [...salesDocuments.value, invoice] : salesDocuments.value.map((item) => item.id === invoice.id ? invoice : item)
+  delete (invoice as SalesDocument & { discountInput?: number }).discountInput
+  await salesDocumentRepository.save(invoice)
   const series = invoiceSeries.value
   if (isNew && series && invoice.number === suggestedNumber) {
     documentSeries.value = documentSeries.value.map((item) => item.id === series.id ? { ...item, nextNumber: item.nextNumber + 1 } : item)
   }
-  recordAudit('Sales', isNew ? 'Created' : 'Updated', `Invoice: ${invoice.number}`, tableAmount(invoice.amount))
+  recordAudit('Sales', isNew ? 'Created' : 'Updated', `Invoice: ${invoice.number}`, tableAmount(invoice.amountCents))
   emit('saved', `Invoice ${invoice.number} ${isNew ? 'added' : 'updated'}.`)
 }
 </script>
@@ -261,7 +276,7 @@ function save() {
                 <td><input v-model.number="line.vatAmount" class="sales-lines-grid__number" type="number" min="0" step="0.01" :aria-label="`Line ${index + 1} VAT`" /></td>
                 <td><input v-model.number="line.creditableVatAmount" class="sales-lines-grid__number" type="number" min="0" step="0.01" :aria-label="`Line ${index + 1} CVAT`" /></td>
               </template>
-              <td class="sales-table__number sales-lines-grid__amount">{{ tableAmount(lineAmount(line)) }}</td>
+              <td class="sales-table__number sales-lines-grid__amount">{{ tableAmount(draftLineAmountCents(line)) }}</td>
             </tr>
             <tr v-if="!draft.lines.length" class="sales-table__empty-row sales-lines-grid__empty">
               <td :colspan="columnCount"><strong>No rows to show</strong><span>Use + to add a row.</span></td>
@@ -269,9 +284,9 @@ function save() {
           </tbody>
           <tfoot><tr>
             <td /><td /><td class="sales-table__number">{{ totals.quantity }}</td><td />
-            <template v-if="options.wtax"><td /><td class="sales-table__number">{{ tableAmount(totals.withholding) }}</td></template>
-            <template v-if="options.vat"><td /><td /><td class="sales-table__number">{{ tableAmount(totals.vat) }}</td><td class="sales-table__number">{{ tableAmount(totals.cvat) }}</td></template>
-            <td class="sales-table__number">{{ tableAmount(totals.amount) }}</td>
+            <template v-if="options.wtax"><td /><td class="sales-table__number">{{ tableAmount(totals.withholdingCents) }}</td></template>
+            <template v-if="options.vat"><td /><td /><td class="sales-table__number">{{ tableAmount(totals.vatCents) }}</td><td class="sales-table__number">{{ tableAmount(totals.creditableVatCents) }}</td></template>
+            <td class="sales-table__number">{{ tableAmount(totals.amountCents) }}</td>
           </tr></tfoot>
         </table>
         <datalist id="invoice-items"><option v-for="item in catalog" :key="item.id" :value="item.name" /></datalist>
@@ -283,13 +298,13 @@ function save() {
       <div class="sales-invoice__totals">
         <div v-if="options.discount" class="sales-invoice__discount">
           <AppSelect id="invoice-discount" :model-value="draft.discountTypeId" label="Discount" :options="discountOptions" @update:model-value="chooseDiscount" />
-          <label v-if="selectedDiscount">{{ selectedDiscount.computation === 'Percentage' ? 'Rate (%)' : 'Amount' }}<input v-model.number="draft.discountRate" type="number" min="0" step="0.01" :disabled="!selectedDiscount.allowOverride" /></label>
+          <label v-if="selectedDiscount">{{ selectedDiscount.computation === 'Percentage' ? 'Rate (%)' : 'Amount' }}<input v-model.number="draft.discountInput" type="number" min="0" step="0.01" :disabled="!selectedDiscount.allowOverride" /></label>
           <small v-if="shown('discount')" class="sales-field-error">{{ shown('discount') }}</small>
         </div>
         <dl>
-          <div><dt>Subtotal</dt><dd>{{ tableAmount(totals.amount) }}</dd></div>
-          <div v-if="selectedDiscount"><dt>Discount</dt><dd>-{{ tableAmount(discountAmount) }}</dd></div>
-          <div class="sales-invoice__grand"><dt>Total before tax</dt><dd>{{ tableAmount(invoiceTotal) }}</dd></div>
+          <div><dt>Subtotal</dt><dd>{{ tableAmount(totals.amountCents) }}</dd></div>
+          <div v-if="selectedDiscount"><dt>Discount</dt><dd>-{{ tableAmount(discountAmountCents) }}</dd></div>
+          <div class="sales-invoice__grand"><dt>Total before tax</dt><dd>{{ tableAmount(invoiceTotalCents) }}</dd></div>
         </dl>
       </div>
     </div>

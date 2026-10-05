@@ -7,7 +7,9 @@ import GeneralJournalEditor from './GeneralJournalEditor.vue'
 import JournalPreviewDetail from './JournalPreviewDetail.vue'
 import JournalPreviewTable from './JournalPreviewTable.vue'
 import { journalPreviewConfigs, type JournalPreviewEntry, type JournalPreviewKind } from './journalPreviewData'
+import { journalBackend } from './journalStore'
 import { sampleJournalRange } from './purchaseJournalData'
+import { generatedJournals, recordWorkflowAction, transitionJournalEntry } from '../workflows/accountingWorkflow'
 import './purchaseJournal.css'
 import './journalPreview.css'
 
@@ -27,8 +29,9 @@ const selectedIds = ref<string[]>([])
 const drafts = ref<JournalPreviewEntry[]>([])
 const editorOpen = ref(false)
 const editingEntry = ref<JournalPreviewEntry | null>(null)
+const notice = ref('')
 const nextGeneralJournalNumber = computed(() => {
-  const numbers = [...config.value.entries, ...drafts.value]
+  const numbers = [...journalBackend.all().filter((entry) => entry.kind === props.kind), ...drafts.value]
     .map((entry) => Number(entry.journalNumber))
     .filter(Number.isFinite)
   return String(Math.max(0, ...numbers) + 1)
@@ -41,7 +44,7 @@ const rangeSchema = z.object({
 
 const entries = computed(() => {
   const query = searchTerm.value.trim().toLocaleLowerCase()
-  return [...config.value.entries, ...drafts.value]
+  return [...journalBackend.all().filter((entry) => entry.kind === props.kind), ...generatedJournals.value.filter((entry) => entry.kind === props.kind), ...drafts.value]
     .filter((entry) => entry.date >= appliedRange.value.from && entry.date <= appliedRange.value.to)
     .filter((entry) => !query || [entry.journalNumber, entry.referenceNumber, entry.party, entry.status, entry.remarks, entry.createdBy]
       .some((value) => value.toLocaleLowerCase().includes(query)))
@@ -133,6 +136,27 @@ function saveDraft(entry: JournalPreviewEntry) {
   reviewMode.value = true
   selectedIds.value = [entry.id]
 }
+
+function applyTransition(action: 'post' | 'void') {
+  if (!selectedIds.value.length) return
+  try {
+    const selected = new Set(selectedIds.value)
+    drafts.value = drafts.value.map((entry) => selected.has(entry.id) ? transitionJournalEntry(entry, action) : entry)
+    notice.value = `${selected.size} journal ${selected.size === 1 ? 'entry' : 'entries'} ${action === 'post' ? 'posted' : 'voided'}.`
+    selectedIds.value = []
+  } catch (error) {
+    notice.value = error instanceof Error ? error.message : 'The journal status could not be changed.'
+  }
+}
+
+const canPost = computed(() => selectedIds.value.length > 0 && selectedIds.value.every((id) => entries.value.find((entry) => entry.id === id)?.status === 'Draft'))
+const canVoid = computed(() => selectedIds.value.length > 0 && selectedIds.value.every((id) => entries.value.find((entry) => entry.id === id)?.status === 'Posted'))
+function transferSelected() {
+  const selected = entries.value.filter((entry) => selectedIds.value.includes(entry.id))
+  selected.forEach((entry) => recordWorkflowAction(entry, 'transferred', `${config.value.transferLabel} requested.`))
+  notice.value = `${selected.length} selected ${selected.length === 1 ? 'journal entry' : 'journal entries'} queued for transfer in this preview.`
+  selectedIds.value = []
+}
 </script>
 
 <template>
@@ -163,13 +187,14 @@ function saveDraft(entry: JournalPreviewEntry) {
           </div>
         </div>
         <template v-if="kind === 'general-journal'">
-          <button class="journal-button journal-button--secondary" type="button" disabled title="Posting requires a connected accounting backend.">Post</button>
-          <button class="journal-button journal-button--secondary" type="button" disabled title="Voiding requires a connected accounting backend.">Void</button>
+          <button class="journal-button journal-button--secondary" type="button" :disabled="!canPost" @click="applyTransition('post')">Post</button>
+          <button class="journal-button journal-button--secondary" type="button" :disabled="!canVoid" @click="applyTransition('void')">Void</button>
           <button class="journal-button journal-button--secondary journal-preview__add" type="button" aria-label="Add General Journal draft" @click="openEditor()"><Plus :size="18" /></button>
         </template>
-        <button v-else class="journal-button journal-button--primary" type="button" disabled title="Journal transfers require a connected accounting backend.">{{ config.transferLabel }}</button>
+        <button v-else class="journal-button journal-button--primary" type="button" :disabled="!selectedIds.length" @click="transferSelected">{{ config.transferLabel }}</button>
       </div>
     </div>
+    <p v-if="notice" class="journal-date-filter__notice" role="status">{{ notice }}</p>
     <div class="journal-workarea journal-preview" :class="{ 'journal-workarea--review': reviewMode, 'journal-preview--review': reviewMode, 'journal-preview--general': kind === 'general-journal' }">
       <JournalPreviewTable :kind="kind" :config="config" :entries="entries" :selected-ids="selectedIds" :review-mode="reviewMode" :filtered="filtered"
         @toggle="toggleSelection" @toggle-all="toggleAll" @open="openEntry" @reset="resetFilters" @add="openEditor()" />

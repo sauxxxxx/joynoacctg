@@ -71,7 +71,20 @@
 .journal-results__count { grid-column: 2; text-align: center; }
 .journal-results__total { grid-column: 6; padding-right: 14px; text-align: right; }
 .journal-results__selection { grid-column: 8 / 10; padding-right: 18px; color: #78828a; text-align: right; }
-.journal-results__sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+.journal-results__sr-only {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 .journal-empty { min-height: 330px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28px; text-align: center; color: #879199; }
 .journal-empty strong { margin-top: 12px; color: #30383e; font-size: 13px; }
 .journal-empty p { margin: 6px 0 15px; color: var(--muted); font-size: 12px; }
