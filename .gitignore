@@ -7,3 +7,4 @@ dist/
 .impeccable/
 .playwright-cli/
 output/playwright/
+server/data/

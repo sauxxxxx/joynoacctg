@@ -2,6 +2,8 @@
 
 Vue 3 frontend for the accounting system. The shared shell contains the sidebar, topbar, navigation search, mobile drawer, and visual tokens. Supabase integration is a later slice.
 
+The local backend foundation runs separately with `npm.cmd run api:dev`. Preview mode remains the frontend default. See [local backend setup and implemented endpoints](docs/LOCAL_BACKEND.md).
+
 ## Run locally
 
 ```powershell
