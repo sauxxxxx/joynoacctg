@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppSkeleton from '../../components/ui/AppSkeleton.vue'
 import { nextTick, ref, watch } from 'vue'
 import { X } from '@lucide/vue'
 import { http } from '../../services/api/httpClient'
@@ -63,7 +64,7 @@ watch(() => props.mode, async (mode) => {
     <form @submit.prevent="save">
       <div class="ws-dialog__header"><h2>{{ mode === 'password' ? 'Change password' : 'My profile' }}</h2><button class="ws-icon-button" type="button" aria-label="Close" :disabled="busy" @click="close"><X :size="18" /></button></div>
       <div class="ws-dialog__body">
-        <p v-if="loading" role="status">Loading your account…</p>
+        <AppSkeleton v-if="loading" variant="form" label="your account" />
         <fieldset v-if="profile" class="ws-form" :disabled="busy" style="border: 0; padding: 0; margin: 0">
           <p class="ws-form__full">Username: {{ profile.username }}</p>
           <template v-if="mode === 'profile'">

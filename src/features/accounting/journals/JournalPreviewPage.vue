@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppDataState from '../../../components/ui/AppDataState.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { CalendarDays, Plus, Search } from '@lucide/vue'
 import { z } from 'zod'
@@ -221,13 +222,13 @@ function transferSelected() {
     </div>
     <p v-if="notice" class="journal-date-filter__notice" role="status">{{ notice }}</p>
     <p v-if="operationError" class="journal-date-filter__error" role="alert">{{ operationError }}</p>
-    <p v-if="loading" role="status">Loading journal entries…</p>
-    <div v-else-if="loadError" role="alert"><p>{{ loadError }}</p><button type="button" class="journal-button" @click="retry">Retry</button></div>
-    <div v-else class="journal-workarea journal-preview" :class="{ 'journal-workarea--review': reviewMode, 'journal-preview--review': reviewMode, 'journal-preview--general': kind === 'general-journal' }">
+    <AppDataState :loading="loading" :error="loadError" label="Journal entries" :empty="!entries.length" :empty-title="filtered ? 'No matching journal entries' : 'No journal entries in this period'" empty-message="Try another search or date range, or review and post your source documents." :action-label="filtered ? 'Reset filters' : kind === 'general-journal' && hasPermission(authUser, 'Accounting', 'create') ? 'Add draft' : undefined" @action="filtered ? resetFilters() : openEditor()" @retry="retry">
+    <div class="journal-workarea journal-preview" :class="{ 'journal-workarea--review': reviewMode, 'journal-preview--review': reviewMode, 'journal-preview--general': kind === 'general-journal' }">
       <JournalPreviewTable :kind="kind" :config="config" :entries="entries" :selected-ids="selectedIds" :review-mode="reviewMode" :filtered="filtered" :can-create="hasPermission(authUser, 'Accounting', 'create') && !busy"
         @toggle="toggleSelection" @toggle-all="toggleAll" @open="openEntry" @reset="resetFilters" @add="openEditor()" />
       <JournalPreviewDetail v-if="reviewMode" :entry="activeEntry" :editable="kind === 'general-journal' && hasPermission(authUser, 'Accounting', 'edit') && !busy" :can-delete="hasPermission(authUser, 'Accounting', 'delete') && !busy" @edit="openEditor" @delete="removeDraft" />
     </div>
+    </AppDataState>
     <GeneralJournalEditor v-if="kind === 'general-journal'" :open="editorOpen" :entry="editingEntry" :next-journal-number="nextGeneralJournalNumber" :busy="busy" :server-error="saveError" @save="saveDraft" @close="editorOpen = false" />
   </section>
 </template>

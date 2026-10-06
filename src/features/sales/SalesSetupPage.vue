@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppDataState from '../../components/ui/AppDataState.vue'
 import { computed, ref, watch } from 'vue'
 import { Plus, Search } from '@lucide/vue'
 import { accountName } from '../accounting/setup/accountSetupData'
@@ -52,8 +53,6 @@ function done(message: string) {
 <template>
   <SalesSetupForm v-if="editor" :key="editor.record?.id ?? 'new'" :kind="pageId" :record="editor.record" @close="editor = null" @saved="done" @deleted="done" />
   <section v-else class="sales-page" :aria-label="title">
-    <p v-if="workspace.loading.value || references.loading.value" role="status">Loading setup records…</p>
-    <p v-if="workspace.error.value || references.error.value" role="alert">{{ workspace.error.value || references.error.value }} <button type="button" @click="workspace.load(); references.retry()">Retry</button></p>
     <div v-if="notice" class="sales-notice" role="status">{{ notice }}</div>
     <div class="sales-panel">
       <div class="sales-panel__toolbar">
@@ -63,6 +62,7 @@ function done(message: string) {
           <button v-if="can('Sales', 'create')" class="sales-button sales-button--primary" type="button" :disabled="workspace.loading.value || references.loading.value || Boolean(references.error.value)" @click="editor = { record: null }; notice = ''"><Plus :size="16" aria-hidden="true" /> Add {{ singular }}</button>
         </div>
       </div>
+    <AppDataState :loading="workspace.loading.value || references.loading.value" :error="workspace.error.value || references.error.value" :empty="!visibleRows.length" :label="title" :empty-title="rows.length ? 'No matching records' : `No ${title.toLocaleLowerCase()} yet`" empty-message="Try another search, or add an option for your sales documents." :action-label="!rows.length && can('Sales', 'create') ? `Add ${singular}` : undefined" @action="editor = { record: null }" @retry="workspace.load(); references.retry()">
       <div class="sales-table-wrap">
         <table class="sales-table sales-list-table">
           <thead>
@@ -86,13 +86,11 @@ function done(message: string) {
                 <td class="sales-table__center"><CheckMark :value="item.allowOverride" label="Allow override" /></td><td>{{ accountName(item.accountId) }}</td>
               </template>
             </tr>
-            <tr v-if="!workspace.loading.value && !workspace.error.value && !visibleRows.length" class="sales-table__empty-row">
-              <td :colspan="columnCount"><strong>{{ rows.length ? 'No matching records' : 'No rows to show' }}</strong><span>{{ rows.length ? 'Try another search.' : `Add a ${singular} to get started.` }}</span></td>
-            </tr>
           </tbody>
           <tfoot><tr><td :colspan="columnCount">{{ visibleRows.length }}</td></tr></tfoot>
         </table>
       </div>
+    </AppDataState>
     </div>
   </section>
 </template>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppDataState from '../../components/ui/AppDataState.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { CalendarDays, Download, LayoutGrid, ListFilter, Plus, Search } from '@lucide/vue'
 import { exportPurchases } from './purchaseExports'
@@ -134,8 +135,6 @@ function postedRecord(message: string) { editorOpen.value = false; notice.value 
 
 <template>
   <section class="purchases-page" :aria-label="config.title">
-    <p v-if="workspace.loading.value || references.loading.value" role="status">Loading records…</p>
-    <p v-if="workspace.error.value || references.error.value" class="purchases-notice" role="alert">{{ workspace.error.value || references.error.value }} <button type="button" @click="workspace.load(); references.load()">Retry</button></p>
     <header class="purchases-toolbar">
       <nav class="purchases-tabs" :aria-label="`${config.title} views`"><button v-for="item in config.tabs" :key="item" type="button" :class="{ 'purchases-tabs__active': activeTab === item }" :aria-current="activeTab === item ? 'page' : undefined" @click="activeTab = item">{{ item }}</button></nav>
       <div class="purchases-toolbar__actions">
@@ -161,10 +160,12 @@ function postedRecord(message: string) { editorOpen.value = false; notice.value 
       </div>
     </header>
     <p v-if="notice" class="purchases-notice" role="status">{{ notice }}</p>
-    <div v-if="!loading && !loadError" class="purchases-workspace" :class="{ 'purchases-workspace--compact': compact, 'purchases-workspace--empty': !visibleRecords.length }">
+    <AppDataState :loading="loading" :error="loadError" :label="config.title" @retry="workspace.load(); references.load()">
+    <div class="purchases-workspace" :class="{ 'purchases-workspace--compact': compact, 'purchases-workspace--empty': !visibleRecords.length }">
       <PurchasesTable :kind="kind" :records="pagedRecords" :filtered="emptyFiltered" :can-create="can('Purchases', 'create')" :create-label="newRecordLabel" @open="openEditor" @reset="resetFilters" @add="openEditor()" />
       <AppPagination v-if="visibleRecords.length" v-model:page="currentPage" :page-size="pageSize" :total="visibleRecords.length" :label="config.title.toLocaleLowerCase()" />
     </div>
+    </AppDataState>
     <PurchasesEditor :open="editorOpen" :kind="kind" :record="selectedRecord" :busy="workspace.busy.value" :server-error="workspace.error.value" :readonly="!can('Purchases', selectedRecord ? 'edit' : 'create')" :can-delete="can('Purchases', 'delete')" @close="editorOpen = false" @save="saveRecord" @delete="deleteRecord" @changed="postedRecord" />
   </section>
 </template>

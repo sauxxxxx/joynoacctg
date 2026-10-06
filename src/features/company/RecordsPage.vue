@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppDataState from '../../components/ui/AppDataState.vue'
 import { computed, nextTick, ref, watch } from 'vue'
 import { errorMessage } from '../../services/api/errors'
 import { getApiCredentials } from '../../services/api/session'
@@ -150,9 +151,8 @@ function fieldId(field: FieldDef) {
           </div>
         </div>
 
-        <p v-if="loading" role="status">Loading records…</p>
-        <div v-else-if="loadError" role="alert"><p>{{ loadError }}</p><button type="button" class="ws-button" @click="load">Retry</button></div>
-        <div v-else class="ws-table-wrap">
+        <AppDataState :loading="loading" :error="loadError" :empty="!visible.length" :label="config.heading ?? config.plural" :empty-title="records.length ? 'No matching records' : `No ${config.plural} yet`" empty-message="Try another search or status filter, or add your first record." :action-label="!records.length && can('create') ? `Add ${config.singular}` : undefined" @action="openForm()" @retry="load">
+        <div class="ws-table-wrap">
           <table class="ws-table co-list">
             <thead><tr><th v-for="column in config.columns" :key="column.label" scope="col" :class="{ 'ws-num': column.numeric, 'co-list__center': column.check }">{{ column.label }}</th></tr></thead>
             <tbody>
@@ -166,16 +166,11 @@ function fieldId(field: FieldDef) {
                   <small v-if="column.sub && column.sub(record)">{{ column.sub(record) }}</small>
                 </td>
               </tr>
-              <tr v-if="!visible.length" class="co-list__empty">
-                <td :colspan="config.columns.length">
-                  <strong>{{ records.length ? `No ${config.plural} match` : 'No rows to show' }}</strong>
-                  <span>{{ records.length ? 'Try another search or status.' : `Add your first ${config.singular} to get started.` }}</span>
-                </td>
-              </tr>
             </tbody>
             <tfoot><tr><td :colspan="config.columns.length"><span>{{ visible.length }}</span><span v-if="config.footer" class="co-list__footnote">{{ config.footer(records) }}</span></td></tr></tfoot>
           </table>
         </div>
+        </AppDataState>
       </div>
     </div>
 

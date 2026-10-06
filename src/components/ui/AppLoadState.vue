@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { AlertCircle, RefreshCw } from '@lucide/vue'
+import AppSkeleton from './AppSkeleton.vue'
 
 /** Loading and failure states for a list or panel. Renders nothing once the data is ready. */
 defineProps<{ status: 'loading' | 'ready' | 'error' | 'idle'; error?: string; label?: string; compact?: boolean }>()
@@ -7,9 +8,7 @@ const emit = defineEmits<{ retry: [] }>()
 </script>
 
 <template>
-  <div v-if="status === 'loading' || status === 'idle'" class="app-load-state" :class="{ 'app-load-state--compact': compact }" role="status">
-    <span class="app-load-state__spinner" aria-hidden="true" />Loading {{ label ?? 'records' }}…
-  </div>
+  <AppSkeleton v-if="status === 'loading' || status === 'idle'" :label="label" />
   <div v-else-if="status === 'error'" class="app-load-state app-load-state--error" :class="{ 'app-load-state--compact': compact }" role="alert">
     <AlertCircle :size="18" aria-hidden="true" />
     <span>{{ error || `The ${label ?? 'records'} could not be loaded.` }}</span>

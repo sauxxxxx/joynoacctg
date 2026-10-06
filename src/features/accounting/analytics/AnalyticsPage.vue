@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppSkeleton from '../../../components/ui/AppSkeleton.vue'
 import { computed, ref } from 'vue'
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, BarChart3, Info, RotateCw } from '@lucide/vue'
 import AppSelect from '../../../components/ui/AppSelect.vue'
@@ -112,7 +113,7 @@ const hasData = computed(() => section.value.groups.length > 0 || currentEarning
         </div>
       </div>
 
-      <div v-if="ledger.loading.value" class="ws-panel"><div class="ws-loading" role="status"><span class="ws-spinner" aria-hidden="true" />Loading ledger…</div></div>
+      <AppSkeleton v-if="ledger.loading.value" variant="dashboard" label="analytics" />
       <div v-else-if="ledger.error.value" class="ws-panel">
         <div class="ws-empty" role="alert">
           <span class="ws-empty__icon"><AlertTriangle :size="22" aria-hidden="true" /></span>

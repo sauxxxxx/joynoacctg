@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppDataState from '../../../components/ui/AppDataState.vue'
 import { computed, ref, watch } from 'vue'
 import { LayoutGrid, ListFilter, Minus, Plus, Search } from '@lucide/vue'
 import { formatMoney } from '../../../lib/money'
@@ -81,8 +82,7 @@ function displayDate(value: string) {
       </div>
     </header>
     <p v-if="notice" class="tax-notice" role="status">{{ notice }}</p>
-    <p v-if="loading" class="tax-notice" role="status">Loading records…</p>
-    <p v-if="error" class="tax-entry-editor__error" role="alert">{{ error }} <button type="button" class="tax-button" :disabled="busy" @click="persistence.load">Reload</button></p>
+    <AppDataState :loading="loading" :error="error" :empty="!visibleRows.length" label="Tax records" empty-title="No records in this view" empty-message="Try another period or filter, or add your first record." :action-label="canCreate ? 'Add record' : undefined" @action="openEditor()" @retry="persistence.load">
     <div class="tax-table-wrap" :class="{ 'tax-table-wrap--compact': compact }">
       <table class="tax-table">
         <thead><tr><th>Form</th><th>Status</th><th>{{ config.cadence === 'Monthly' ? 'Month' : 'Quarter' }}</th><th v-if="config.hasTaxDue" class="tax-table__number">Tax due</th><th v-if="config.hasAmendment" class="tax-table__center">Amendment?</th><th>Due date</th><th v-if="config.entryLabel">{{ config.entryLabel }}</th></tr></thead>
@@ -95,9 +95,9 @@ function displayDate(value: string) {
           <td>{{ displayDate(record.dueDate) }}</td><td v-if="config.entryLabel">{{ record.entry || '—' }}</td>
         </tr></tbody>
       </table>
-      <div v-if="!loading && !error && !visibleRows.length" class="tax-empty" role="status"><strong>{{ rows.length ? 'No matching entries' : 'No rows to show' }}</strong><p>{{ rows.length ? 'Clear the search or draft filter to see more entries.' : `No ${config.title} entries are available for ${loadedYear}.` }}</p><button v-if="canCreate" type="button" class="tax-button" @click="openEditor()">Add entry</button></div>
       <footer><span>{{ visibleRows.length }} {{ visibleRows.length === 1 ? 'entry' : 'entries' }}</span><span>{{ config.cadence }} · {{ loadedYear }}</span></footer>
     </div>
+    </AppDataState>
     <TaxEntryEditor :open="editorOpen" :busy="busy" :server-error="error" :form-id="formId" :year="loadedYear" :record="editing" :used-periods="usedPeriods" @close="editorOpen = false" @save="saveRecord" />
   </section>
 </template>

@@ -13,7 +13,9 @@ import './company.css'
 import { saveAccountMappings } from './companyPersistence'
 import { errorMessage } from '../../services/api/errors'
 import { accountStore } from '../accounting/setup/accountSetupData'
-void accountStore.ensureLoaded()
+import { useCollections } from '../../services/collectionStore'
+import AppDataState from '../../components/ui/AppDataState.vue'
+const accountReferences = useCollections(accountStore)
 
 type Section = 'general' | 'mapping'
 const sections: { id: Section; label: string; icon: typeof Info }[] = [
@@ -119,6 +121,7 @@ async function saveMapping() {
               <h2>Account Mapping</h2>
               <div class="ws-panel__actions"><label class="ws-search"><Search :size="16" aria-hidden="true" /><input v-model="mappingSearch" type="search" placeholder="Type to filter" aria-label="Search account mapping" /></label></div>
             </div>
+            <AppDataState :loading="accountReferences.loading.value" :error="accountReferences.error.value" :empty="!visibleMappings.length" label="Account mappings" empty-title="No matching account mappings" empty-message="Try another search to find the mapping you need." @retry="accountReferences.retry">
             <div class="ws-table-wrap">
               <table class="ws-table co-list">
                 <thead><tr><th scope="col">Label</th><th scope="col">Account</th><th scope="col">Description</th></tr></thead>
@@ -133,6 +136,7 @@ async function saveMapping() {
                 <tfoot><tr><td colspan="3">{{ visibleMappings.length }}</td></tr></tfoot>
               </table>
             </div>
+            </AppDataState>
           </div>
         </div>
       </SubNavLayout>
