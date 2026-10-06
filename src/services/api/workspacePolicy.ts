@@ -29,9 +29,8 @@ export function resolveWorkspace(_search: string, configuredBaseUrl: string, dev
 export const isConnectedResource = (resource: string) => connectedResources.has(resource)
 export const isConnectedPage = (pageId: string) => connectedPages.has(pageId)
 
-export function workspaceUrl(href: string, mode: WorkspaceMode) {
+export function cleanWorkspaceUrl(href: string) {
   const url = new URL(href)
-  url.searchParams.set('mode', mode)
-  url.searchParams.delete('page')
+  url.searchParams.delete('mode')
   return url.href
 }

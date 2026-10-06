@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isConnectedPage, isConnectedResource, resolveWorkspace, workspaceUrl } from '../services/api/workspacePolicy'
+import { cleanWorkspaceUrl, isConnectedPage, isConnectedResource, resolveWorkspace } from '../services/api/workspacePolicy'
 
 describe('preview and connected workspace boundaries', () => {
   it('uses real records locally and selects the private proxy', () => {
@@ -25,7 +25,15 @@ describe('preview and connected workspace boundaries', () => {
     expect(isConnectedResource('/company/user')).toBe(true)
     expect(isConnectedResource('/roles')).toBe(true)
   })
-  it('switches on the same origin and drops unsupported page selection', () => {
-    expect(workspaceUrl('http://localhost:5173/?page=sales-invoices&mode=preview', 'connected')).toBe('http://localhost:5173/?mode=connected')
+  it.each(['preview', 'connected', 'unknown'])('removes obsolete %s mode links without losing the requested page', (mode) => {
+    expect(cleanWorkspaceUrl(`https://joynoadmin.tech/?mode=${mode}&page=trial-balance`)).toBe('https://joynoadmin.tech/?page=trial-balance')
+  })
+  it('preserves the origin, path, other query parameters and fragment', () => {
+    expect(cleanWorkspaceUrl('http://localhost:5173/accounting?mode=preview&page=sales-invoices&search=invoice+one#main-content')).toBe('http://localhost:5173/accounting?page=sales-invoices&search=invoice+one#main-content')
+  })
+  it('removes repeated mode parameters and leaves clean links unchanged', () => {
+    expect(cleanWorkspaceUrl('https://joynoadmin.tech/?mode=preview&mode=connected#main-content')).toBe('https://joynoadmin.tech/#main-content')
+    const href = 'https://joynoadmin.tech/?page=trial-balance#main-content'
+    expect(cleanWorkspaceUrl(href)).toBe(href)
   })
 })
