@@ -1,4 +1,4 @@
-import { isConnectedPage, isConnectedResource, resolveWorkspace, workspaceUrl, type WorkspaceMode } from './workspacePolicy'
+import { isConnectedPage, isConnectedResource, resolveWorkspace } from './workspacePolicy'
 
 // Normal local and hosted sessions use the same API. Sample adapters are test-only.
 const workspace = resolveWorkspace(
@@ -22,6 +22,3 @@ export const connectedAvailable = workspace.connectedAvailable
 export const usesApiResource = (resource: string) => !isPreviewMode && isConnectedResource(resource)
 export const supportsWorkspacePage = (pageId: string) => isPreviewMode || isConnectedPage(pageId)
 
-export function switchWorkspace(mode: WorkspaceMode) {
-  if (mode !== workspaceMode) window.location.assign(workspaceUrl(window.location.href, mode))
-}

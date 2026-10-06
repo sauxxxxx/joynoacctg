@@ -6,6 +6,7 @@ import AppConfirmDialog from './components/ui/AppConfirmDialog.vue'
 import type { JournalPreviewKind } from './features/accounting/journals/journalPreviewData'
 import LoginPage from './features/auth/LoginPage.vue'
 import { supportsWorkspacePage } from './services/api/config'
+import { cleanWorkspaceUrl } from './services/api/workspacePolicy'
 import { useAuth } from './features/auth/authStore'
 import type { AuthCredentials } from './features/auth/authTypes'
 import type { PurchaseKind } from './features/purchases/purchasePreviewData'
@@ -108,14 +109,16 @@ function onKeydown(event: KeyboardEvent) {
 
 function selectPage(id: string) {
   activeId.value = id
-  const url = new URL(window.location.href)
+  const url = new URL(cleanWorkspaceUrl(window.location.href))
   if (id === 'dashboard') url.searchParams.delete('page')
   else url.searchParams.set('page', id)
   window.history.pushState(null, '', url)
 }
 
 function syncPageFromUrl() {
-  const id = new URL(window.location.href).searchParams.get('page')
+  const href = cleanWorkspaceUrl(window.location.href)
+  if (href !== window.location.href) window.history.replaceState(window.history.state, '', href)
+  const id = new URL(href).searchParams.get('page')
   const fallback = authUser.value ? allowedPageIds.value.find(supportsWorkspacePage) ?? allowedPageIds.value[0] ?? landingPage : landingPage
   activeId.value = id && findPage(id) ? id : fallback
 }
@@ -127,7 +130,7 @@ async function handleSignIn(credentials: AuthCredentials) {
 function handleSignOut() {
   signOut()
   activeId.value = landingPage
-  const url = new URL(window.location.href)
+  const url = new URL(cleanWorkspaceUrl(window.location.href))
   url.searchParams.delete('page')
   window.history.replaceState(null, '', url)
 }
