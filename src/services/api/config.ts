@@ -21,4 +21,3 @@ export const workspaceMode = workspace.mode
 export const connectedAvailable = workspace.connectedAvailable
 export const usesApiResource = (resource: string) => !isPreviewMode && isConnectedResource(resource)
 export const supportsWorkspacePage = (pageId: string) => isPreviewMode || isConnectedPage(pageId)
-
