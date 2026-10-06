@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppDataState from '../../../components/ui/AppDataState.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { CalendarDays, ListFilter } from '@lucide/vue'
 import AppDatePicker from '../../../components/ui/AppDatePicker.vue'
@@ -102,8 +103,6 @@ function exportCsv() {
 
 <template>
   <section class="purchase-report-page" :aria-label="title">
-    <p v-if="workspace.loading.value || references.loading.value" role="status">Loading report records…</p>
-    <p v-if="workspace.error.value || references.error.value" role="alert">{{ workspace.error.value || references.error.value }} <button type="button" @click="workspace.load(); references.load()">Retry</button></p>
     <header class="purchase-report-toolbar">
       <h2>{{ title }}</h2>
       <button type="button" class="purchase-report-button" :disabled="workspace.loading.value || references.loading.value || Boolean(workspace.error.value || references.error.value)" @click="exportCsv">Export CSV</button>
@@ -121,6 +120,7 @@ function exportCsv() {
         </aside>
       </div>
     </header>
+    <AppDataState :loading="workspace.loading.value || references.loading.value" :error="workspace.error.value || references.error.value" :empty="isSchedule ? !scheduleRows.length : isAging ? !payableReportRows.length : !fundRows.length" variant="report" :label="title" :empty-title="isSchedule || isAging ? 'No payables in this period' : 'No fund movements in this period'" empty-message="Only posted records appear here. Adjust the period or review the source records." @retry="workspace.load(); references.load()">
     <div class="purchase-report-panel">
       <div v-if="isSchedule" class="purchase-report-content">
         <div class="purchase-report-heading"><h3>Payables</h3><span>Next {{ applied.months }} month{{ applied.months === 1 ? '' : 's' }}</span></div>
@@ -131,7 +131,7 @@ function exportCsv() {
         <div class="purchase-report-table-scroll"><table class="purchase-report-table purchase-report-table--aging"><thead><tr><th>Supplier</th><th class="purchase-report-table__number">Balance</th><th class="purchase-report-table__number">Current</th><th class="purchase-report-table__number">1–30 Days</th><th class="purchase-report-table__number">31–60 Days</th><th class="purchase-report-table__number">61–90 Days</th><th class="purchase-report-table__number">91+ Days</th></tr></thead><tbody><tr v-for="row in payableReportRows" :key="row.id"><td>{{ row.vendor }}</td><td class="purchase-report-table__number">{{ formatMoney(row.balanceCents) }}</td><td class="purchase-report-table__number">{{ formatMoney(row.currentCents) }}</td><td class="purchase-report-table__number">{{ formatMoney(row.oneToThirtyCents) }}</td><td class="purchase-report-table__number">{{ formatMoney(row.thirtyOneToSixtyCents) }}</td><td class="purchase-report-table__number">{{ formatMoney(row.sixtyOneToNinetyCents) }}</td><td class="purchase-report-table__number">{{ formatMoney(row.overNinetyCents) }}</td></tr></tbody><tfoot><tr><th>Total</th><td v-for="key in (['balanceCents', 'currentCents', 'oneToThirtyCents', 'thirtyOneToSixtyCents', 'sixtyOneToNinetyCents', 'overNinetyCents'] as const)" :key="key" class="purchase-report-table__number">{{ formatMoney(agingTotals[key]) }}</td></tr></tfoot></table></div>
       </div>
       <div v-else-if="fundRows.length" class="purchase-report-content"><div class="purchase-report-heading"><h3>Posted fund movements</h3><span>Net movement in this period: {{ formatMoney(fundNetMovement) }}. This is not an opening or closing balance.</span></div><table class="purchase-report-table"><thead><tr><th>Date</th><th>Voucher</th><th>Custodian</th><th>Movement</th><th class="purchase-report-table__number">Amount</th><th>Remarks</th></tr></thead><tbody><tr v-for="record in fundRows" :key="record.id"><td>{{ reportDate(record.date) }}</td><td>{{ record.number }}</td><td>{{ custodianName(record.custodianId!) }}</td><td>{{ record.fundMovement }}</td><td class="purchase-report-table__number">{{ formatMoney(record.totalCents) }}</td><td>{{ record.remarks }}</td></tr></tbody></table></div>
-      <div v-else class="purchase-report-empty" role="status"><strong>No fund movements to show</strong><p>Select a fund custodian and movement on a cash, check or petty cash voucher, then review and post it.</p><button class="purchase-report-button" type="button" @click="filtersOpen = true">Adjust filters</button></div>
     </div>
+    </AppDataState>
   </section>
 </template>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import AppDataState from '../../components/ui/AppDataState.vue'
 import { computed, ref, watch } from 'vue'
-import { Download, FileClock, Search } from '@lucide/vue'
+import { Download, Search } from '@lucide/vue'
 import { auditRepository } from './auditLog'
 import { errorMessage } from '../../services/api/errors'
 import { getApiCredentials } from '../../services/api/session'
@@ -74,8 +75,6 @@ function exportCsv() {
   <section class="ws-page co-page" aria-label="Audit trail">
     <div class="ws-stack">
       <p class="co-intro">A history of changes to your company records, newest first.</p>
-      <p v-if="loading" role="status">Loading activity…</p>
-      <div v-if="loadError" role="alert"><p>{{ loadError }}</p><button type="button" class="ws-button" @click="load">Retry</button></div>
 
       <div class="ws-panel ws-panel--clip">
         <div class="ws-toolbar">
@@ -84,9 +83,10 @@ function exportCsv() {
           <div class="ws-toolbar__field"><AppSelect id="audit-action" v-model="action" aria-label="Action" :options="actionOptions" /></div>
           <span class="ws-toolbar__spacer" />
           <DateRangeFilter v-model="range" :default-value="allDates" optional />
-          <button v-if="isAddOnEnabled('report-csv-export')" class="ws-button" type="button" :disabled="!filtered.length" @click="exportCsv"><Download :size="15" aria-hidden="true" /> Export CSV</button>
+          <button v-if="isAddOnEnabled('report-csv-export')" class="ws-button" type="button" :disabled="loading || Boolean(loadError) || !filtered.length" @click="exportCsv"><Download :size="15" aria-hidden="true" /> Export CSV</button>
         </div>
 
+        <AppDataState :loading="loading" :error="loadError" :empty="!visible.length" label="Activity" :empty-title="auditEvents.length ? 'No matching activity' : 'No activity yet'" empty-message="Changes to records you can access will appear here. Try another search or filter." :action-label="filtersActive ? 'Clear filters' : undefined" @action="clear" @retry="load">
         <div v-if="visible.length" class="ws-table-wrap">
           <table class="ws-table">
             <thead><tr><th scope="col">When</th><th scope="col">User</th><th scope="col">Module</th><th scope="col">Action</th><th scope="col">Reference</th><th scope="col">Details</th></tr></thead>
@@ -102,16 +102,11 @@ function exportCsv() {
             </tbody>
           </table>
         </div>
-        <div v-else class="ws-empty">
-          <span class="ws-empty__icon"><FileClock :size="22" aria-hidden="true" /></span>
-          <strong>{{ auditEvents.length ? 'No events match' : 'No activity yet' }}</strong>
-          <span>{{ auditEvents.length ? 'Try other filters.' : 'Changes to Sales and Company records, settings, and report exports will appear here.' }}</span>
-          <button v-if="filtersActive" class="ws-button" type="button" @click="clear">Clear filters</button>
-        </div>
         <div class="ws-panel__footer">
           <span>Showing {{ visible.length }} of {{ filtered.length }} event{{ filtered.length === 1 ? '' : 's' }}</span>
           <button v-if="visible.length < filtered.length" class="ws-button ws-button--small" type="button" @click="shown += pageSize">Show more</button>
         </div>
+        </AppDataState>
       </div>
     </div>
   </section>

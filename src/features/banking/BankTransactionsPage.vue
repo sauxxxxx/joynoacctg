@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { Filter, LayoutGrid, Plus, Search } from '@lucide/vue'
 import AppDatePicker from '../../components/ui/AppDatePicker.vue'
-import AppLoadState from '../../components/ui/AppLoadState.vue'
+import AppDataState from '../../components/ui/AppDataState.vue'
 import AppPagination from '../../components/ui/AppPagination.vue'
 import AppSelect from '../../components/ui/AppSelect.vue'
 import { formatMoney } from '../../lib/money'
@@ -99,7 +99,6 @@ function clearFilters() { from.value = ''; to.value = ''; accountId.value = ''; 
 
 <template>
   <section class="banking-page" aria-label="Bank transactions">
-    <p v-if="references.error.value" role="alert">{{ references.error.value }} <button type="button" @click="references.retry">Retry</button></p>
     <header class="banking-toolbar banking-toolbar--tabs">
       <nav class="banking-tabs" aria-label="Bank transaction views"><button type="button" :class="{ 'banking-tabs__active': tab === 'search' }" @click="tab = 'search'">Search</button><button type="button" :class="{ 'banking-tabs__active': tab === 'unjournalized' }" @click="tab = 'unjournalized'">Unjournalized</button></nav>
       <div class="banking-toolbar__actions">
@@ -112,15 +111,15 @@ function clearFilters() { from.value = ''; to.value = ''; accountId.value = ''; 
     </header>
     <div class="banking-heading-row"><div><h2>{{ tab === 'search' ? 'Bank transactions' : 'Unjournalized bank transactions' }}</h2><span>{{ tab === 'search' ? 'Review recorded bank activity' : 'Select draft transactions to create a journal entry' }}</span></div></div>
     <p v-if="notice" class="banking-notice" role="status">{{ notice }}</p>
+    <AppDataState :loading="list.status.value === 'loading' || references.loading.value" :error="list.error.value || references.error.value" :empty="!rows.length" label="Bank transactions" :empty-title="filtered ? 'No matching transactions' : tab === 'unjournalized' ? 'No draft transactions' : 'No bank transactions yet'" empty-message="Try another search or filter, or add a record when ready." :action-label="!filtered && tab === 'search' && can('Banking', 'create') ? 'Add bank transaction' : undefined" @action="openEditor()" @retry="list.reload(); references.retry()">
     <div class="banking-table-wrap" :class="{ 'banking-table-wrap--compact': compact }">
       <table class="banking-table banking-table--transactions"><thead><tr><th v-if="tab === 'unjournalized'" class="banking-table__check"><input type="checkbox" :checked="selectedAll" aria-label="Select all transactions on this page" @change="toggleAll" /></th><th>Date</th><th>Bank account</th><th>Direction</th><th>Purpose</th><th>Party</th><th class="banking-table__number">Amount</th><th>Status</th><th>Account</th><th>Reference</th><th>Description</th></tr></thead>
         <tbody v-if="list.status.value === 'ready'"><tr v-for="item in rows" :key="item.id" @click="openEditor(item)"><td v-if="tab === 'unjournalized'" class="banking-table__check" @click.stop><input v-model="selectedIds" type="checkbox" :value="item.id" :aria-label="`Select ${item.reference || item.purpose}`" /></td><td><button type="button" class="banking-table__link" @click.stop="openEditor(item)">{{ item.date }}</button></td><td>{{ bankAccountName(item.bankAccountId) }}</td><td>{{ item.direction === 'Receipt' ? 'Money in' : 'Money out' }}</td><td>{{ item.purpose }}</td><td>{{ item.party || item.partyType }}</td><td class="banking-table__number">{{ formatMoney(item.amountCents) }}</td><td><span class="banking-status" :class="`banking-status--${item.status.toLocaleLowerCase()}`">{{ item.status }}</span></td><td>{{ accountName(item.ledgerAccountId) }}</td><td>{{ item.reference || '—' }}</td><td>{{ item.description || '—' }}</td></tr></tbody>
       </table>
-      <AppLoadState :status="list.status.value" :error="list.error.value" label="bank transactions" @retry="list.reload" />
-      <div v-if="list.status.value === 'ready' && !rows.length" class="banking-empty"><strong>{{ filtered ? 'No matching transactions' : tab === 'unjournalized' ? 'No draft transactions' : 'No bank transactions yet' }}</strong><p>{{ filtered ? 'Adjust the date, account, or search filters.' : tab === 'unjournalized' ? 'Draft transactions appear here until a journal entry is created.' : 'Add a transaction to begin tracking bank activity.' }}</p><button v-if="!filtered && tab === 'search' && can('Banking', 'create')" class="banking-button" type="button" :disabled="references.loading.value || Boolean(references.error.value)" @click="openEditor()">Add bank transaction</button></div>
       <footer><span>{{ list.totalItems.value }} {{ list.totalItems.value === 1 ? 'transaction' : 'transactions' }}</span><span>Total {{ formatMoney(list.summary.value.amountCents ?? 0) }}</span></footer>
       <AppPagination v-model:page="list.page.value" :page-size="list.pageSize" :total="list.totalItems.value" label="bank transactions" />
     </div>
+    </AppDataState>
     <BankTransactionEditor :open="editorOpen" :record="editing" :save="saveRecord" :readonly="!can('Banking', editing ? 'edit' : 'create')" :can-delete="can('Banking', 'delete')" :can-void="canVoid" :busy="mutation.pending.value" @close="editorOpen = false" @delete="deleteRecord" @void="voidRecord" />
   </section>
 </template>

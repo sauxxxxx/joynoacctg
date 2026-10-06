@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppDataState from '../../../components/ui/AppDataState.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { LayoutGrid, ListFilter, Search } from '@lucide/vue'
 import AppDatePicker from '../../../components/ui/AppDatePicker.vue'
@@ -112,16 +113,15 @@ onBeforeUnmount(() => { document.removeEventListener('pointerdown', onOutside); 
       </div>
     </header>
     <p v-if="notice" class="tax-notice" role="status">{{ notice }}</p>
-    <p v-if="loading" class="tax-notice" role="status">Loading certificates…</p>
-    <p v-if="error" class="tax-entry-editor__error" role="alert">{{ error }} <button type="button" class="tax-button" :disabled="busy" @click="persistence.load">Reload</button></p>
+    <AppDataState :loading="loading" :error="error" :empty="!visibleRows.length" label="Tax certificates" empty-title="No records in this view" empty-message="Try another period or filter, or add your first record." :action-label="canCreate ? 'Add record' : undefined" @action="openEditor()" @retry="persistence.load">
     <div class="tax-table-wrap" :class="{ 'tax-table-wrap--compact': compact }">
       <table class="tax-table tax-certificate-table">
         <thead><tr><th>Source</th><th>Vendor/Customer</th><th>Status</th><th class="tax-table__number">Amount</th><th>Date</th><th>From</th><th>To</th><th>TIN</th><th>Signed file reference</th></tr></thead>
         <tbody><tr v-for="record in visibleRows" :key="record.id" :class="{ 'tax-table__selected': selectedId === record.id }" :aria-selected="selectedId === record.id" @click="selectedId = record.id"><td>{{ record.source }}</td><td><button type="button" class="tax-table__link" :disabled="!canEdit" @click.stop="openEditor(record)">{{ record.party }}</button></td><td><span class="tax-status" :class="`tax-status--${record.status.toLocaleLowerCase()}`">{{ record.status }}</span></td><td class="tax-table__number">{{ formatMoney(record.amountCents) }}</td><td>{{ displayDate(record.date) }}</td><td>{{ displayDate(record.fromDate) }}</td><td>{{ displayDate(record.toDate) }}</td><td>{{ record.tin || '—' }}</td><td>{{ record.signedFile || '—' }}</td></tr></tbody>
       </table>
-      <div v-if="!loading && !error && !visibleRows.length" class="tax-empty" role="status"><strong>No rows to show</strong><p>{{ activeTab === 'Draft' ? 'Record a certificate to begin.' : 'No certificates match the selected filters.' }}</p><button v-if="activeTab === 'Draft' && canCreate" type="button" class="tax-button" @click="openEditor()">Record certificate</button></div>
       <footer><span>{{ visibleRows.length }} {{ visibleRows.length === 1 ? 'certificate' : 'certificates' }}</span><span>{{ activeTab }} · {{ formatMoney(visibleRows.reduce((sum, row) => sum + row.amountCents, 0)) }}</span></footer>
     </div>
+    </AppDataState>
     <TaxCertificateEditor :open="editorOpen" :record="editing" :busy="busy" :server-error="error" :form-id="formId" @close="editorOpen = false" @save="saveRecord" />
   </section>
 </template>

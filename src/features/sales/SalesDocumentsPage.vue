@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppDataState from '../../components/ui/AppDataState.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Download, Plus, Search } from '@lucide/vue'
 import AppPagination from '../../components/ui/AppPagination.vue'
@@ -132,7 +133,6 @@ const columns = computed<Column[]>(() => {
 // Footer totals appear under these columns, as in the legacy screens.
 const totalledColumns: ColumnKey[] = ['amount', 'invoiceTotal', 'totalPaid', 'totalUnpaid']
 const showSelect = computed(() => false)
-const columnSpan = computed(() => columns.value.length + (showSelect.value ? 1 : 0))
 const allSelected = computed(() => visibleRecords.value.length > 0 && visibleRecords.value.every((item) => selectedIds.value.includes(item.id)))
 
 /**
@@ -237,8 +237,6 @@ function onBulkSaved(count: number) {
   <ReceiptForm v-else-if="editor && !isInvoice" :key="`${pageId}-${editor.doc?.id ?? 'new'}`" :kind="pageId as 'sales-receipts' | 'acknowledgement-receipts'" :receipt="editor.doc" @close="editor = null" @saved="done" @deleted="done" />
   <SalesBulkInvoices v-else-if="isInvoice && bulkOpen" @close="bulkOpen = false" @saved="onBulkSaved" />
   <section v-else class="sales-page" :aria-label="title">
-    <p v-if="workspace.loading.value || references.loading.value" role="status">Loading records…</p>
-    <p v-if="workspace.error.value || references.error.value" class="sales-notice" role="alert">{{ workspace.error.value || references.error.value }} <button type="button" class="sales-button" @click="workspace.load(); references.load()">Retry</button></p>
     <p v-if="notice" class="sales-notice" role="status">{{ notice }}</p>
     <div class="sales-tabs" role="tablist" :aria-label="`${title} views`">
       <button v-for="item in views" :id="`docs-tab-${item.id}`" :key="item.id" type="button" role="tab" class="sales-tabs__tab" :aria-selected="view === item.id" aria-controls="docs-tab-panel" @click="chooseView(item.id)">{{ item.label }}</button>
@@ -252,10 +250,11 @@ function onBulkSaved(count: number) {
           <AppSelect v-if="!isAcknowledgement" v-model="customerFilter" aria-label="Filter by customer" :options="customerFilterOptions" compact />
           <DateRangeFilter v-model="dateRange" :default-value="defaultRange" />
           <button v-if="can('Sales', 'create')" class="sales-button sales-button--primary" type="button" title="Ctrl+Shift+A" :disabled="workspace.loading.value || references.loading.value || Boolean(references.error.value)" @click="open(null)"><Plus :size="16" aria-hidden="true" /> New {{ singular }}</button>
-          <button class="sales-button" type="button" :disabled="!visibleRecords.length" @click="exportCsv"><Download :size="16" aria-hidden="true" /> Export CSV</button>
+          <button class="sales-button" type="button" :disabled="workspace.loading.value || references.loading.value || Boolean(workspace.error.value || references.error.value) || !visibleRecords.length" @click="exportCsv"><Download :size="16" aria-hidden="true" /> Export CSV</button>
           <button v-if="isInvoice && can('Sales', 'create')" class="sales-button" type="button" :disabled="workspace.loading.value || references.loading.value || Boolean(references.error.value)" @click="bulkOpen = true">Add multiple</button>
         </div>
       </div>
+    <AppDataState :loading="workspace.loading.value || references.loading.value" :error="workspace.error.value || references.error.value" :empty="!visibleRecords.length" :label="title" :empty-title="`No ${title.toLocaleLowerCase()} in this view`" empty-message="Try another search or date range, or add a record when you are ready." @retry="workspace.load(); references.load()">
       <div class="sales-table-wrap">
         <table class="sales-table sales-document-table">
           <thead><tr>
@@ -271,9 +270,6 @@ function onBulkSaved(count: number) {
                 <template v-else>{{ cellText(item, column.key) }}</template>
               </td>
             </tr>
-            <tr v-if="!visibleRecords.length" class="sales-table__empty-row">
-              <td :colspan="columnSpan"><strong>No rows to show</strong><span>Try another date range or create a {{ singular }}.</span></td>
-            </tr>
           </tbody>
           <tfoot><tr>
             <td v-if="showSelect" />
@@ -285,6 +281,7 @@ function onBulkSaved(count: number) {
         </table>
       </div>
       <AppPagination v-model:page="currentPage" :page-size="pageSize" :total="visibleRecords.length" :label="title.toLocaleLowerCase()" />
+    </AppDataState>
     </div>
   </section>
 </template>

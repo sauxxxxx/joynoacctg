@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppDataState from '../../components/ui/AppDataState.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { Archive, Download, FileText, Plus, RotateCcw, Search, Upload, X } from '@lucide/vue'
 import AppSelect from '../../components/ui/AppSelect.vue'
@@ -20,7 +21,7 @@ const search = ref('')
 const category = ref('')
 const notice = ref('')
 const error = ref('')
-const loading = ref(false)
+const loading = ref(true)
 const busy = ref(false)
 const archived = ref(false)
 const { authUser } = useAuth()
@@ -134,8 +135,6 @@ async function fileAction(document: StoredDocument, restore = false) {
     <div class="ws-stack">
       <p class="co-intro">Keep registrations, filings, contracts, and other supporting files in one place.</p>
       <p class="co-intro">Private PDFs and images, up to 10 MB each. Archived files remain available to restore.</p>
-      <p v-if="loading" class="ws-notice" role="status">Loading documents…</p>
-      <p v-if="error" class="ws-form-error" role="alert">{{ error }} <button v-if="!busy" type="button" class="ws-button" @click="load">Reload</button></p>
       <p v-if="notice" class="ws-notice" role="status">{{ notice }}</p>
 
       <div class="ws-panel ws-panel--clip">
@@ -146,6 +145,7 @@ async function fileAction(document: StoredDocument, restore = false) {
           <label><input v-model="archived" type="checkbox" :disabled="busy" /> Archived</label>
           <button v-if="can('Documents', 'create')" class="ws-button ws-button--primary" type="button" :disabled="loading || busy" @click="openUpload"><Plus :size="16" aria-hidden="true" /> Upload document</button>
         </div>
+        <AppDataState :loading="loading" :error="error" :empty="!visible.length" label="Documents" :empty-title="storedDocuments.length ? 'No matching documents' : archived ? 'No archived documents' : 'No documents yet'" empty-message="Your uploaded files will appear here. Try another search or category." @retry="load">
         <div v-if="visible.length" class="ws-table-wrap">
           <table class="ws-table">
             <thead><tr><th scope="col">Document</th><th scope="col">Category</th><th scope="col">Reference</th><th scope="col" class="ws-num">Size</th><th scope="col">Uploaded</th><th scope="col" class="ws-actions">Actions</th></tr></thead>
@@ -165,13 +165,8 @@ async function fileAction(document: StoredDocument, restore = false) {
             </tbody>
           </table>
         </div>
-        <div v-else-if="!loading && !error" class="ws-empty">
-          <span class="ws-empty__icon"><FileText :size="22" aria-hidden="true" /></span>
-          <strong>{{ storedDocuments.length ? 'No documents match' : 'No documents yet' }}</strong>
-          <span>{{ storedDocuments.length ? 'Try another search or category.' : 'Upload a file to start your document library.' }}</span>
-          <button v-if="!archived && !storedDocuments.length && can('Documents', 'create')" class="ws-button" type="button" :disabled="busy" @click="openUpload"><Upload :size="15" aria-hidden="true" /> Upload document</button>
-        </div>
         <div class="ws-panel__footer"><span>{{ visible.length }} of {{ storedDocuments.length }} documents</span></div>
+        </AppDataState>
       </div>
     </div>
 

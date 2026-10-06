@@ -4,7 +4,7 @@ import { useAuth } from '../auth/authStore'
 import { usePermissions } from '../auth/permissions'
 import { useSubmit } from '../../lib/useSubmit'
 import { LayoutGrid, ListFilter, Plus, Search } from '@lucide/vue'
-import AppLoadState from '../../components/ui/AppLoadState.vue'
+import AppDataState from '../../components/ui/AppDataState.vue'
 import AppPagination from '../../components/ui/AppPagination.vue'
 import { useRepositoryList } from '../../lib/useRepositoryList'
 import { useCollections } from '../../services/collectionStore'
@@ -50,7 +50,6 @@ async function deleteRecord(record: BankAccountRecord) {
 
 <template>
   <section class="banking-page" aria-label="Bank accounts">
-    <p v-if="references.error.value" role="alert">{{ references.error.value }} <button type="button" @click="references.retry">Retry</button></p>
     <header class="banking-toolbar">
       <div><h2>Bank accounts</h2><span>Accounts available for recording bank transactions</span></div>
       <div class="banking-toolbar__actions">
@@ -61,15 +60,15 @@ async function deleteRecord(record: BankAccountRecord) {
       </div>
     </header>
     <p v-if="notice" class="banking-notice" role="status">{{ notice }}</p>
+    <AppDataState :loading="list.status.value === 'loading' || references.loading.value" :error="list.error.value || references.error.value" :empty="!list.items.value.length" label="Bank accounts" :empty-title="query || activeOnly ? 'No matching accounts' : 'No bank accounts yet'" empty-message="Try another search or filter, or add a record when ready." :action-label="!query && !activeOnly && can('Banking', 'create') ? 'Add bank account' : undefined" @action="openEditor()" @retry="list.reload(); references.retry()">
     <div class="banking-table-wrap" :class="{ 'banking-table-wrap--compact': compact }">
       <table class="banking-table banking-table--accounts">
         <thead><tr><th>Name</th><th>Bank</th><th>Account number</th><th>Account</th><th class="banking-table__center">Active?</th></tr></thead>
         <tbody v-if="list.status.value === 'ready'"><tr v-for="item in list.items.value" :key="item.id" @click="openEditor(item)"><td><button type="button" class="banking-table__link" @click.stop="openEditor(item)">{{ item.name }}</button></td><td>{{ item.bank || '—' }}</td><td>{{ item.accountNumber || '—' }}</td><td>{{ accountName(item.ledgerAccountId) }}</td><td class="banking-table__center"><input type="checkbox" :checked="item.active" disabled /></td></tr></tbody>
       </table>
-      <AppLoadState :status="list.status.value" :error="list.error.value" label="bank accounts" @retry="list.reload" />
-      <div v-if="list.status.value === 'ready' && !list.items.value.length" class="banking-empty"><strong>{{ query || activeOnly ? 'No matching accounts' : 'No bank accounts yet' }}</strong><p>{{ query || activeOnly ? 'Try another search or clear the active filter.' : 'Add an account to start recording bank activity.' }}</p><button v-if="!query && !activeOnly && can('Banking', 'create')" class="banking-button" type="button" @click="openEditor()">Add bank account</button></div>
       <AppPagination v-model:page="list.page.value" :page-size="list.pageSize" :total="list.totalItems.value" label="bank accounts" />
     </div>
+    </AppDataState>
     <BankAccountEditor :open="editorOpen" :record="editing" :save="saveRecord" :readonly="!can('Banking', editing ? 'edit' : 'create')" :can-delete="can('Banking', 'delete')" :busy="mutation.pending.value" @close="editorOpen = false" @delete="deleteRecord" />
   </section>
 </template>

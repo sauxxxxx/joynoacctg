@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { asyncPage } from './services/asyncPage'
 import AppSidebar from './components/AppSidebar.vue'
 import AppTopbar from './components/AppTopbar.vue'
 import AppConfirmDialog from './components/ui/AppConfirmDialog.vue'
@@ -22,27 +23,27 @@ import { findPage } from './navigation'
 import { navigation } from './navigation'
 import { canAccessPage, filterNavigation } from './features/auth/permissions'
 
-const DashboardPage = defineAsyncComponent(() => import('./features/dashboard/DashboardPage.vue'))
-const AccessDenied = defineAsyncComponent(() => import('./features/auth/AccessDenied.vue'))
-const JournalPreviewPage = defineAsyncComponent(() => import('./features/accounting/journals/JournalPreviewPage.vue'))
-const AccountSetupPage = defineAsyncComponent(() => import('./features/accounting/setup/AccountSetupPage.vue'))
-const PurchasesPage = defineAsyncComponent(() => import('./features/purchases/PurchasesPage.vue'))
-const PurchaseSetupPage = defineAsyncComponent(() => import('./features/purchases/setup/PurchaseSetupPage.vue'))
-const PurchaseReportsPage = defineAsyncComponent(() => import('./features/purchases/reports/PurchaseReportsPage.vue'))
-const TaxFormsPage = defineAsyncComponent(() => import('./features/government/tax/TaxFormsPage.vue'))
-const YearlyTaxFormsPage = defineAsyncComponent(() => import('./features/government/tax/YearlyTaxFormsPage.vue'))
-const TaxCertificatesPage = defineAsyncComponent(() => import('./features/government/tax/TaxCertificatesPage.vue'))
-const BirBooksPage = defineAsyncComponent(() => import('./features/government/books/BirBooksPage.vue'))
-const BankAccountsPage = defineAsyncComponent(() => import('./features/banking/BankAccountsPage.vue'))
-const BankTransactionsPage = defineAsyncComponent(() => import('./features/banking/BankTransactionsPage.vue'))
-const FixedAssetsPage = defineAsyncComponent(() => import('./features/assets/FixedAssetsPage.vue'))
-const AccountingReportsPage = defineAsyncComponent(() => import('./features/accounting/reports/AccountingReportsPage.vue'))
-const AnalyticsPage = defineAsyncComponent(() => import('./features/accounting/analytics/AnalyticsPage.vue'))
-const CompanyPage = defineAsyncComponent(() => import('./features/company/CompanyPage.vue'))
-const CustomersPage = defineAsyncComponent(() => import('./features/sales/customers/CustomersPage.vue'))
-const SalesDocumentsPage = defineAsyncComponent(() => import('./features/sales/SalesDocumentsPage.vue'))
-const SalesReportsPage = defineAsyncComponent(() => import('./features/sales/SalesReportsPage.vue'))
-const SalesSetupPage = defineAsyncComponent(() => import('./features/sales/SalesSetupPage.vue'))
+const DashboardPage = asyncPage(() => import('./features/dashboard/DashboardPage.vue'))
+const AccessDenied = asyncPage(() => import('./features/auth/AccessDenied.vue'))
+const JournalPreviewPage = asyncPage(() => import('./features/accounting/journals/JournalPreviewPage.vue'))
+const AccountSetupPage = asyncPage(() => import('./features/accounting/setup/AccountSetupPage.vue'))
+const PurchasesPage = asyncPage(() => import('./features/purchases/PurchasesPage.vue'))
+const PurchaseSetupPage = asyncPage(() => import('./features/purchases/setup/PurchaseSetupPage.vue'))
+const PurchaseReportsPage = asyncPage(() => import('./features/purchases/reports/PurchaseReportsPage.vue'))
+const TaxFormsPage = asyncPage(() => import('./features/government/tax/TaxFormsPage.vue'))
+const YearlyTaxFormsPage = asyncPage(() => import('./features/government/tax/YearlyTaxFormsPage.vue'))
+const TaxCertificatesPage = asyncPage(() => import('./features/government/tax/TaxCertificatesPage.vue'))
+const BirBooksPage = asyncPage(() => import('./features/government/books/BirBooksPage.vue'))
+const BankAccountsPage = asyncPage(() => import('./features/banking/BankAccountsPage.vue'))
+const BankTransactionsPage = asyncPage(() => import('./features/banking/BankTransactionsPage.vue'))
+const FixedAssetsPage = asyncPage(() => import('./features/assets/FixedAssetsPage.vue'))
+const AccountingReportsPage = asyncPage(() => import('./features/accounting/reports/AccountingReportsPage.vue'))
+const AnalyticsPage = asyncPage(() => import('./features/accounting/analytics/AnalyticsPage.vue'))
+const CompanyPage = asyncPage(() => import('./features/company/CompanyPage.vue'))
+const CustomersPage = asyncPage(() => import('./features/sales/customers/CustomersPage.vue'))
+const SalesDocumentsPage = asyncPage(() => import('./features/sales/SalesDocumentsPage.vue'))
+const SalesReportsPage = asyncPage(() => import('./features/sales/SalesReportsPage.vue'))
+const SalesSetupPage = asyncPage(() => import('./features/sales/SalesSetupPage.vue'))
 
 const landingPage = 'dashboard'
 const activeId = ref(landingPage)

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppSkeleton from '../../../components/ui/AppSkeleton.vue'
 import { computed, ref, watch } from 'vue'
 import { AlertTriangle, Download, Info, Printer, RotateCw } from '@lucide/vue'
 import { companyAddress, companyDisplayName, companyProfile, reportTemplates, reportingSettings } from '../../company/companyStore'
@@ -56,7 +57,7 @@ function print() {
         </div>
       </div>
 
-      <div v-if="loading" class="ws-panel"><div class="ws-loading" role="status"><span class="ws-spinner" aria-hidden="true" />Loading ledger…</div></div>
+      <AppSkeleton v-if="loading" variant="report" label="report" />
       <div v-else-if="error" class="ws-panel">
         <div class="ws-empty" role="alert">
           <span class="ws-empty__icon"><AlertTriangle :size="22" aria-hidden="true" /></span>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppDataState from '../../components/ui/AppDataState.vue'
 import { computed, ref } from 'vue'
 import { loadCompanyAccess, loadCompanySettings } from './companyPersistence'
 import { errorMessage } from '../../services/api/errors'
@@ -36,9 +37,8 @@ if (!isPreviewMode && props.pageId !== 'documents') void load()
 </script>
 
 <template>
-  <p v-if="loading" role="status">Loading company information…</p>
-  <section v-else-if="loadError" role="alert"><p>{{ loadError }}</p><button type="button" class="ws-button" @click="load">Retry</button></section>
-  <fieldset v-else class="company-page" :disabled="readOnly">
+  <AppDataState :loading="loading" :error="loadError" label="Company information" :variant="recordConfig || pageId === 'roles' || pageId === 'audit-trail' ? 'table' : 'form'" @retry="load">
+  <fieldset class="company-page" :disabled="readOnly">
   <ProfilePage v-if="pageId === 'company-profile'" />
   <RegistrationPage v-else-if="pageId === 'company-registration'" />
   <RecordingPage v-else-if="pageId === 'company-recording'" />
@@ -50,6 +50,7 @@ if (!isPreviewMode && props.pageId !== 'documents') void load()
   <DocumentsPage v-else-if="pageId === 'documents'" />
   <RecordsPage v-else-if="recordConfig" :config="recordConfig" />
   </fieldset>
+  </AppDataState>
 </template>
 
 <style scoped>.company-page { margin: 0; padding: 0; border: 0; min-width: 0; }</style>

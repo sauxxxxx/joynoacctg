@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppSkeleton from '../../../components/ui/AppSkeleton.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ArrowDown, ArrowUp, BookOpen, Download, Filter, RefreshCw, Search } from '@lucide/vue'
 import AppDatePicker from '../../../components/ui/AppDatePicker.vue'
@@ -78,10 +79,10 @@ onBeforeUnmount(() => { if (searchTimer) window.clearTimeout(searchTimer) })
             </form>
           </div>
           <span class="ws-toolbar__spacer" />
-          <button class="ws-button" type="button" :disabled="!rows.length" @click="exportRows"><Download :size="15" /> Export current page</button>
+          <button class="ws-button" type="button" :disabled="resource.loading.value || Boolean(resource.error.value) || !rows.length" @click="exportRows"><Download :size="15" /> Export current page</button>
         </div>
 
-        <div v-if="resource.loading.value" class="ws-loading" role="status"><span class="ws-spinner" aria-hidden="true" />Loading BIR books…</div>
+        <AppSkeleton v-if="resource.loading.value || resource.status.value === 'idle'" variant="report" label="BIR books" />
         <div v-else-if="resource.error.value" class="ws-empty" role="alert"><strong>Entries could not be loaded</strong><span>{{ resource.error.value }}</span><button class="ws-button" type="button" @click="resource.run"><RefreshCw :size="15" /> Try again</button></div>
         <div v-else-if="resource.status.value === 'empty'" class="ws-empty" role="status"><BookOpen class="ws-empty__icon" :size="22" /><strong>No posted entries found</strong><span>Adjust the search, dates, or selected book.</span></div>
         <div v-else class="ws-table-wrap">
@@ -99,7 +100,7 @@ onBeforeUnmount(() => { if (searchTimer) window.clearTimeout(searchTimer) })
             <tfoot><tr><th scope="row" colspan="5">Current page total</th><td class="ws-num">{{ formatMoney(totalDebit) }}</td><td class="ws-num">{{ formatMoney(totalCredit) }}</td></tr></tfoot>
           </table>
         </div>
-        <footer v-if="page" class="ws-panel__footer"><span>{{ page.totalItems }} posted entries</span><div class="bir-books__pagination"><button class="ws-button ws-button--small" type="button" :disabled="page.page <= 1" @click="changePage(page.page - 1)">Previous</button><span>Page {{ page.page }} of {{ page.totalPages }}</span><button class="ws-button ws-button--small" type="button" :disabled="page.page >= page.totalPages" @click="changePage(page.page + 1)">Next</button></div></footer>
+        <footer v-if="page && !resource.loading.value && !resource.error.value && rows.length" class="ws-panel__footer"><span>{{ page.totalItems }} posted entries</span><div class="bir-books__pagination"><button class="ws-button ws-button--small" type="button" :disabled="page.page <= 1" @click="changePage(page.page - 1)">Previous</button><span>Page {{ page.page }} of {{ page.totalPages }}</span><button class="ws-button ws-button--small" type="button" :disabled="page.page >= page.totalPages" @click="changePage(page.page + 1)">Next</button></div></footer>
       </div>
     </div>
   </section>

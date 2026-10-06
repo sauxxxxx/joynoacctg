@@ -28,7 +28,7 @@
 .dashboard-chart__gridlines i { width: 100%; border-top: 1px solid #edf0f1; }
 .dashboard-chart__column { position: relative; z-index: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; color: #707c84; font-size: 10px; }
 .dashboard-chart__bars { width: 100%; flex: 1; display: flex; align-items: flex-end; justify-content: center; gap: 5px; }
-.dashboard-chart__bar { width: min(21px, 34%); min-height: 4px; border-radius: 4px 4px 1px 1px; transition: filter 160ms ease, transform 160ms ease; transform-origin: bottom; }
+.dashboard-chart__bar { width: min(21px, 34%); border-radius: 4px 4px 1px 1px; transition: filter 160ms ease, transform 160ms ease; transform-origin: bottom; }
 .dashboard-chart__bar:hover { filter: brightness(.88); transform: scaleY(1.02); }
 .dashboard-chart__bar--revenue, .dashboard-key--revenue { background: #344c5a; }
 .dashboard-chart__bar--expense, .dashboard-key--expense { background: #b5c0c6; }
@@ -55,6 +55,8 @@
 .dashboard-result > span { display: block; color: #68747c; font-size: 10px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
 .dashboard-result strong { display: block; margin-top: 5px; color: #27704a; font-size: 25px; line-height: 1.15; font-weight: 690; letter-spacing: -.025em; font-variant-numeric: tabular-nums; }
 .dashboard-result small { display: block; margin-top: 7px; color: #747f87; font-size: 10px; }
+.dashboard-setup-note { margin: 0 18px 16px; padding-top: 12px; border-top: 1px solid var(--border); color: #667680; font-size: 11px; }
+.dashboard-setup-note p { margin: 0; }
 .dashboard-performance { height: 11px; display: flex; margin: 3px 18px 12px; overflow: hidden; border-radius: 3px; background: #b5c0c6; }
 .dashboard-performance span { width: var(--revenue-width); background: #344c5a; }
 .dashboard-performance i { flex: 1; }

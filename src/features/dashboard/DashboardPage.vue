@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
-import { AlertCircle, ArrowRight, CalendarDays, FileClock, Landmark, RefreshCw, Scale, TrendingUp } from '@lucide/vue'
+import { ArrowRight, CalendarDays, FileClock, Landmark, Scale, TrendingUp } from '@lucide/vue'
+import AppDataState from '../../components/ui/AppDataState.vue'
+import AppEmptyState from '../../components/ui/AppEmptyState.vue'
+import { useAuth } from '../auth/authStore'
+import { usePermissions } from '../auth/permissions'
 import { useAsyncResource } from '../../lib/asyncState'
 import { formatMoney } from '../../lib/money'
 import type { DashboardDeadline } from './dashboardContract'
@@ -12,12 +16,15 @@ import './dashboard.css'
 type CalendarCell = { key: string; day?: number; deadline?: DashboardDeadline }
 
 const emit = defineEmits<{ navigate: [id: string] }>()
+const { can } = usePermissions(useAuth().authUser)
 const resource = useAsyncResource({ load: async () => (await http.get<EntityResponseDto<DashboardSnapshot>>('/dashboard')).data })
 const balanceLabel = (value: number | null) => value === null ? 'Not set up' : `₱${formatMoney(value)}`
 const data = computed(() => resource.data.value)
 const maxTrend = computed(() => Math.max(1, ...(data.value?.trends.flatMap((row) => [row.revenueCents, row.expenseCents]) ?? [1])))
 const netResultCents = computed(() => (data.value?.revenueCents ?? 0) - (data.value?.expensesCents ?? 0))
 const hasPerformance = computed(() => Boolean(data.value?.revenueCents || data.value?.expensesCents))
+const hasTrend = computed(() => data.value?.trends.some((point) => point.revenueCents !== 0 || point.expenseCents !== 0))
+const missingMappings = computed(() => data.value && [data.value.bankBalanceCents, data.value.receivablesCents, data.value.payablesCents].some((value) => value === null))
 const revenueRatio = computed(() => {
   const revenue = Math.abs(data.value?.revenueCents ?? 0)
   const total = revenue + Math.abs(data.value?.expensesCents ?? 0)
@@ -70,13 +77,8 @@ onMounted(resource.run)
 
 <template>
   <section class="dashboard" aria-label="Accounting dashboard">
-    <div v-if="resource.loading.value" class="dashboard-state" role="status"><span class="ws-spinner" aria-hidden="true" />Loading your accounting overview…</div>
-    <div v-else-if="resource.status.value === 'error'" class="dashboard-state dashboard-state--error" role="alert">
-      <AlertCircle :size="22" aria-hidden="true" /><strong>Dashboard unavailable</strong><span>{{ resource.error.value }}</span>
-      <button class="ws-button" type="button" @click="resource.run"><RefreshCw :size="15" /> Try again</button>
-    </div>
-
-    <template v-else-if="data">
+    <AppDataState :loading="resource.loading.value || resource.status.value === 'idle'" :error="resource.error.value" variant="dashboard" label="Accounting overview" @retry="resource.run">
+    <template v-if="data">
       <header class="dashboard__intro">
         <div><h1>Overview</h1><p>{{ data.companyName }} · Posted accounting activity and upcoming work</p></div>
       </header>
@@ -94,17 +96,18 @@ onMounted(resource.run)
             <div><dt>{{ netResultCents >= 0 ? 'Net income' : 'Net loss' }}</dt><dd :class="{ 'is-negative': netResultCents < 0 }">₱{{ formatMoney(Math.abs(netResultCents)) }}</dd></div>
           </dl>
 
-          <div class="dashboard-chart" role="img" aria-label="Revenue and expenses for the last six posted months">
+          <div v-if="hasTrend" class="dashboard-chart" role="img" aria-label="Revenue and expenses for the last six posted months">
             <div class="dashboard-chart__axis" aria-hidden="true"><span>{{ axisLabel(100) }}</span><span>{{ axisLabel(50) }}</span><span>₱0</span></div>
             <div class="dashboard-chart__plot">
               <div class="dashboard-chart__gridlines" aria-hidden="true"><i /><i /><i /></div>
               <div v-for="point in data.trends" :key="point.month" class="dashboard-chart__column">
-                <div class="dashboard-chart__bars"><span class="dashboard-chart__bar dashboard-chart__bar--revenue" :style="{ height: `${Math.max(3, point.revenueCents / maxTrend * 100)}%` }" :title="`${monthLabel(point.month)} revenue: ₱${formatMoney(point.revenueCents)}`" /><span class="dashboard-chart__bar dashboard-chart__bar--expense" :style="{ height: `${Math.max(3, point.expenseCents / maxTrend * 100)}%` }" :title="`${monthLabel(point.month)} expenses: ₱${formatMoney(point.expenseCents)}`" /></div>
+                <div class="dashboard-chart__bars"><span class="dashboard-chart__bar dashboard-chart__bar--revenue" :style="{ height: `${point.revenueCents ? Math.max(3, point.revenueCents / maxTrend * 100) : 0}%` }" :title="`${monthLabel(point.month)} revenue: ₱${formatMoney(point.revenueCents)}`" /><span class="dashboard-chart__bar dashboard-chart__bar--expense" :style="{ height: `${point.expenseCents ? Math.max(3, point.expenseCents / maxTrend * 100) : 0}%` }" :title="`${monthLabel(point.month)} expenses: ₱${formatMoney(point.expenseCents)}`" /></div>
                 <span>{{ monthLabel(point.month) }}</span>
               </div>
             </div>
           </div>
-          <footer class="dashboard-legend"><span><i class="dashboard-key dashboard-key--revenue" />Revenue</span><span><i class="dashboard-key dashboard-key--expense" />Expenses</span></footer>
+          <AppEmptyState v-else compact title="No posted revenue or expenses" message="Recorded drafts appear in your lists. This chart updates after journal entries are posted." action-label="View journal entries" @action="emit('navigate', 'general-journal')" />
+          <footer v-if="hasTrend" class="dashboard-legend"><span><i class="dashboard-key dashboard-key--revenue" />Revenue</span><span><i class="dashboard-key dashboard-key--expense" />Expenses</span></footer>
         </section>
 
         <section class="dashboard-panel dashboard-panel--calendar">
@@ -114,7 +117,8 @@ onMounted(resource.run)
             <span v-for="cell in calendarCells" :key="cell.key" class="dashboard-calendar__day" :class="{ 'dashboard-calendar__day--due': cell.deadline, 'dashboard-calendar__day--blank': !cell.day }" role="gridcell" :title="cell.deadline ? `${cell.deadline.form}: ${cell.deadline.detail}` : undefined">{{ cell.day }}</span>
           </div>
           <div v-if="nextDeadline" class="dashboard-next-due"><span>Next deadline</span><strong>{{ dateLabel(nextDeadline.dueDate) }}</strong><small>{{ nextDeadlineCount > 1 ? `${nextDeadlineCount} forms due` : `${nextDeadline.form} · ${nextDeadline.detail}` }}</small></div>
-          <button class="dashboard-link dashboard-link--footer" type="button" @click="emit('navigate', 'form-2550m')">Tax management <ArrowRight :size="14" /></button>
+          <AppEmptyState v-else compact :title="can('Government', 'view') ? 'No recorded filing deadlines' : 'Tax calendar access restricted'" :message="can('Government', 'view') ? 'Add tax records and their deadlines to see them here. This is not an official filing calendar.' : 'Ask your administrator if you need access to tax records.'" />
+          <button v-if="can('Government', 'view')" class="dashboard-link dashboard-link--footer" type="button" @click="emit('navigate', 'form-2550m')">Tax management <ArrowRight :size="14" /></button>
         </section>
       </div>
 
@@ -127,6 +131,7 @@ onMounted(resource.run)
             <div><dt><Scale :size="15" />Payables</dt><dd>{{ balanceLabel(data.payablesCents) }}</dd></div>
             <div><dt><FileClock :size="15" />Draft journal entries</dt><dd>{{ data.unjournalizedCount }}</dd></div>
           </dl>
+          <div v-if="missingMappings" class="dashboard-setup-note"><p>Some balance accounts are not mapped yet.</p><button v-if="can('Company', 'edit')" class="dashboard-link" type="button" @click="emit('navigate', 'company-recording')">Review account mappings <ArrowRight :size="14" /></button></div>
         </section>
 
         <section class="dashboard-panel dashboard-panel--performance">
@@ -139,10 +144,11 @@ onMounted(resource.run)
         <section class="dashboard-panel dashboard-panel--activity">
           <header class="dashboard-panel__header"><div><h2>Recent activity</h2><p>Latest recorded changes</p></div></header>
           <ul v-if="data.activities.length" class="dashboard-activity"><li v-for="activity in data.activities.slice(0, 4)" :key="activity.id"><span class="dashboard-activity__mark" /><span><strong>{{ activity.action }} · {{ activity.reference }}</strong><small>{{ activity.module }} · {{ activityDate(activity.at) }}</small></span></li></ul>
-          <div v-else class="dashboard-panel__empty">No activity has been recorded yet.</div>
-          <button class="dashboard-link dashboard-link--footer" type="button" @click="emit('navigate', 'audit-trail')">Audit trail <ArrowRight :size="14" /></button>
+          <AppEmptyState v-else compact title="No recent activity" message="Changes to records you can access will appear here." />
+          <button v-if="can('Company', 'view')" class="dashboard-link dashboard-link--footer" type="button" @click="emit('navigate', 'audit-trail')">Audit trail <ArrowRight :size="14" /></button>
         </section>
       </div>
     </template>
+    </AppDataState>
   </section>
 </template>

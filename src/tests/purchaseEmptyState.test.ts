@@ -68,7 +68,7 @@ describe('purchase empty and populated layouts', () => {
     const wrapper = mountPage()
     expect(wrapper.find('.purchases-empty').exists()).toBe(false)
     expect(wrapper.find('.app-pagination').exists()).toBe(false)
-    expect(wrapper.text()).toContain(state === 'loading' ? 'Loading records' : controls.error)
+    expect(wrapper.text()).toContain(state === 'loading' ? 'Loading Invoices' : controls.error)
     wrapper.unmount()
   })
 })

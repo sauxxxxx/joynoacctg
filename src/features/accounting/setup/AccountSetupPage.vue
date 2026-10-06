@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppDataState from '../../../components/ui/AppDataState.vue'
 import { computed, ref } from 'vue'
 import { ChevronDown, ChevronRight, LayoutGrid, ListFilter, Plus, Search } from '@lucide/vue'
 import { confirmAction, showAlert } from '../../../services/dialogService'
@@ -99,9 +100,8 @@ function toggleExpanded(code: string) { expanded.value = expanded.value.includes
         <button type="button" class="setup-icon-button" :aria-pressed="compact" title="Toggle compact rows" aria-label="Toggle compact rows" @click="compact = !compact"><LayoutGrid :size="18" /></button>
       </div>
     </header>
-    <p v-if="loading" class="setup-empty" role="status">Loading company records…</p>
-    <div v-else-if="loadError" class="setup-empty" role="alert"><p>{{ loadError }}</p><button type="button" class="setup-button" @click="retry">Retry</button></div>
-    <div v-else-if="!isCategories && tab === 'tree'" class="setup-tree" role="tree" aria-label="Account tree">
+    <AppDataState :loading="loading" :error="loadError" :empty="!isCategories && tab === 'tree' ? !treeRows.length : !(isCategories ? visibleCategories : visibleAccounts).length" :label="title" empty-title="No accounts or categories in this view" empty-message="Try another search or active filter. Set up categories before adding accounts." @retry="retry">
+    <div v-if="!isCategories && tab === 'tree'" class="setup-tree" role="tree" aria-label="Account tree">
       <div v-for="row in treeRows" :key="row.key" class="setup-tree__row" :class="{ 'setup-tree__row--account': !row.group }" :style="{ paddingLeft: `${20 + row.depth * 28}px` }" role="treeitem" :aria-level="row.depth + 1" :aria-expanded="row.group && row.expandable ? expanded.includes(row.code) : undefined">
         <button v-if="row.group && row.expandable" type="button" class="setup-tree__expand" :aria-label="`${expanded.includes(row.code) ? 'Collapse' : 'Expand'} ${row.name}`" @click="toggleExpanded(row.code)"><ChevronDown v-if="expanded.includes(row.code)" :size="15" /><ChevronRight v-else :size="15" /></button>
         <span v-else class="setup-tree__spacer" />
@@ -127,6 +127,7 @@ function toggleExpanded(code: string) { expanded.value = expanded.value.includes
       </tbody></table><p v-if="!(isCategories ? visibleCategories : visibleAccounts).length" class="setup-empty">{{ !isPreviewMode && !categories.length ? 'Your company has no account categories yet. Create a category first, then add accounts.' : 'No matching records.' }}</p></div>
       <footer class="setup-table-area__footer"><span>{{ (isCategories ? visibleCategories : visibleAccounts).length }} {{ isCategories ? 'categories' : 'accounts' }}</span></footer>
     </div>
+    </AppDataState>
     <AccountSetupEditor :open="editorOpen" :kind="isCategories ? 'category' : 'account'" :record="editing" :busy="busy" :server-error="saveError" :can-save="canSave" :can-delete="canDelete" @close="editorOpen = false" @save-account="saveAccount" @save-category="saveCategory" @delete="removeRecord" />
   </section>
 </template>

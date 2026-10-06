@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppDataState from '../../components/ui/AppDataState.vue'
 import { computed, ref } from 'vue'
 import AppSelect from '../../components/ui/AppSelect.vue'
 import { getAgingBucket } from '../../lib/aging'
@@ -112,8 +113,6 @@ function exportCsv() {
 
 <template>
   <section class="sales-page" :aria-label="title">
-    <p v-if="workspace.loading.value || references.loading.value" role="status">Loading report records…</p>
-    <p v-if="workspace.error.value || references.error.value" role="alert">{{ workspace.error.value || references.error.value }} <button type="button" @click="workspace.load(); references.load()">Retry</button></p>
     <div class="sales-panel sales-report">
       <div class="sales-panel__toolbar">
         <div><h2>{{ title }}</h2><p>{{ isAging ? 'See how long invoice balances have been outstanding.' : 'See receivables due in the selected period.' }}</p></div>
@@ -126,6 +125,7 @@ function exportCsv() {
           <button type="button" class="sales-button" :disabled="workspace.loading.value || references.loading.value || Boolean(workspace.error.value || references.error.value || monthsError)" @click="exportCsv">Export CSV</button>
         </div>
       </div>
+    <AppDataState :loading="workspace.loading.value || references.loading.value" :error="workspace.error.value || references.error.value" :empty="!monthsError && (isAging ? !agingRows.length : !scheduleRows.length)" variant="report" :label="title" empty-title="No receivables in this period" empty-message="Only posted, outstanding invoices appear here. Try another period or review your sales records." @retry="workspace.load(); references.load()">
       <div class="sales-report__results">
         <div class="sales-report__heading sales-report__heading--center"><h3>{{ isAging ? 'AR Aging' : 'Receivables' }}</h3><span>As of {{ reportDate(asOf) }}</span></div>
         <p v-if="monthsError" class="sales-form__error" role="alert">{{ monthsError }}</p>
@@ -148,6 +148,7 @@ function exportCsv() {
           </table>
         </div>
       </div>
+    </AppDataState>
     </div>
   </section>
 </template>

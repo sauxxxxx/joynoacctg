@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppDataState from '../../../components/ui/AppDataState.vue'
 import { computed, nextTick, ref } from 'vue'
 import { LayoutGrid, ListFilter, Plus, Search } from '@lucide/vue'
 import { accountName } from '../../accounting/setup/accountSetupData'
@@ -62,8 +63,6 @@ async function deleteRecord(record: PurchaseSetupRecord) {
 
 <template>
   <section class="purchase-setup-page" :aria-label="title">
-    <p v-if="workspace.loading.value || references.loading.value" role="status">Loading setup records…</p>
-    <p v-if="workspace.error.value || references.error.value" role="alert">{{ workspace.error.value || references.error.value }} <button type="button" @click="workspace.load(); references.retry()">Retry</button></p>
     <header class="purchase-setup-toolbar">
       <nav v-if="pageId === 'vendors'" class="purchase-setup-tabs" aria-label="Vendor views"><button type="button" :class="{ 'purchase-setup-tabs__active': vendorTab === 'vendors' }" @click="selectVendorTab('vendors')">Vendors</button><button type="button" :class="{ 'purchase-setup-tabs__active': vendorTab === 'search' }" @click="selectVendorTab('search')">Search</button></nav>
       <h2 v-else>{{ title }}</h2>
@@ -75,6 +74,7 @@ async function deleteRecord(record: PurchaseSetupRecord) {
       </div>
     </header>
     <p v-if="notice" class="purchase-setup-notice" role="status">{{ notice }}</p>
+    <AppDataState :loading="workspace.loading.value || references.loading.value" :error="workspace.error.value || references.error.value" :empty="!visibleRows.length" :label="title" :empty-title="rows.length ? 'No matching records' : `No ${title.toLocaleLowerCase()} yet`" empty-message="Try another search or active filter, or add your first record." :action-label="!rows.length && can('Purchases', 'create') ? 'Add record' : undefined" @action="openEditor()" @retry="workspace.load(); references.retry()">
     <div class="purchase-setup-table-wrap" :class="{ 'purchase-setup-table-wrap--compact': compact }">
       <table class="purchase-setup-table">
         <thead>
@@ -95,9 +95,9 @@ async function deleteRecord(record: PurchaseSetupRecord) {
           </tr>
         </tbody>
       </table>
-      <div v-if="!workspace.loading.value && !workspace.error.value && !visibleRows.length" class="purchase-setup-empty" role="status"><strong>{{ rows.length ? 'No matching records' : 'No rows to show' }}</strong><p>{{ rows.length ? 'Try another search or clear the active filter.' : `Add a ${title.replace(/s$/, '').toLocaleLowerCase()} to get started.` }}</p><button v-if="!rows.length && can('Purchases', 'create')" class="purchase-setup-button" type="button" @click="openEditor()">Add record</button></div>
       <footer>{{ visibleRows.length }}</footer>
     </div>
+    </AppDataState>
     <PurchaseSetupEditor :open="editorOpen" :kind="pageId" :record="editing" :busy="workspace.busy.value" :error="workspace.error.value" :readonly="!editable" :can-delete="can('Purchases', 'delete')" @close="editorOpen = false" @save="saveRecord" @delete="deleteRecord" />
   </section>
 </template>

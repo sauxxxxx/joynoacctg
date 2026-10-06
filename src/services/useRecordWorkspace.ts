@@ -5,7 +5,7 @@ import type { Entity, EntityRepository } from './repository'
 
 /** Shared persistence lifecycle for small, explicitly typed record registers. */
 export function useRecordWorkspace<T extends Entity>(repository: EntityRepository<T>, rows: Ref<T[]>) {
-  const loading = ref(false)
+  const loading = ref(true)
   const busy = ref(false)
   const error = ref('')
   let generation = 0
