@@ -1,0 +1,6 @@
+*.sh text eol=lf
+deploy/** text eol=lf
+server/db/postgresMigrations/*.sql text eol=lf
+server/db/migrations/002_company.sql text eol=lf
+server/db/migrations/003_journals.sql text eol=lf
+server/db/migrations/004_documents.sql text eol=lf

@@ -2,11 +2,17 @@ import { ref } from 'vue'
 import { purchaseSetupRecordId, purchaseSetupRecords } from './setup/purchaseSetupData'
 
 export type PurchaseKind = 'purchase-invoices' | 'payrolls' | 'cash-voucher' | 'check-voucher' | 'petty-cash-voucher' | 'purchase-receipts'
-export type PurchaseStatus = 'Posted' | 'Draft'
+export type PurchaseStatus = 'Posted' | 'Draft' | 'Voided'
 
 export interface PurchaseLine { id: string; description: string; quantity: number; unitPriceCents: number }
 export interface PurchaseRecord {
   id: string
+  version?: number
+  journalEntryId?: string
+  dueDate?: string
+  custodianId?: string
+  fundMovement?: '' | 'Replenishment' | 'Disbursement'
+  allocations?: { id: string; invoiceId: string; others: string; amountCents: number }[]
   kind: PurchaseKind
   number: string
   date: string
@@ -37,11 +43,11 @@ export interface PurchaseConfig {
 }
 
 export const purchaseConfigs: Record<PurchaseKind, PurchaseConfig> = {
-  'purchase-invoices': { title: 'Invoices', numberLabel: 'Sales Invoice #', tabs: ['Search', 'Unjournalized', 'Unpaid'], sampleCount: 10 },
+  'purchase-invoices': { title: 'Invoices', numberLabel: 'Supplier Invoice #', tabs: ['Search', 'Unjournalized', 'Unpaid'], sampleCount: 10 },
   payrolls: { title: 'Payrolls', numberLabel: 'Series No', tabs: ['Search', 'Unjournalized'], sampleCount: 0 },
-  'cash-voucher': { title: 'Cash Vouchers', numberLabel: 'Cash Voucher #', tabs: ['Search', 'Unreconciled', 'Unjournalized'], sampleCount: 10 },
-  'check-voucher': { title: 'Check Vouchers', numberLabel: 'Check Voucher #', tabs: ['Search', 'Unreconciled', 'Unjournalized'], sampleCount: 0 },
-  'petty-cash-voucher': { title: 'Petty Cash Vouchers', numberLabel: 'Petty Cash Voucher #', tabs: ['Search', 'Unreconciled', 'Unjournalized'], sampleCount: 0 },
+  'cash-voucher': { title: 'Cash Vouchers', numberLabel: 'Cash Voucher #', tabs: ['Search', 'Unjournalized'], sampleCount: 10 },
+  'check-voucher': { title: 'Check Vouchers', numberLabel: 'Check Voucher #', tabs: ['Search', 'Unjournalized'], sampleCount: 0 },
+  'petty-cash-voucher': { title: 'Petty Cash Vouchers', numberLabel: 'Petty Cash Voucher #', tabs: ['Search', 'Unjournalized'], sampleCount: 0 },
   'purchase-receipts': { title: 'Receipts', numberLabel: 'Receipt #', tabs: ['Search', 'Unjournalized'], sampleCount: 2 },
 }
 

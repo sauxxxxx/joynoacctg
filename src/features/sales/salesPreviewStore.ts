@@ -5,6 +5,7 @@ export type PeriodUnit = 'Days' | 'Months' | 'Years'
 
 export interface SetupRecord {
   id: string
+  version?: number
   kind: SetupKind
   name: string
   active: boolean
@@ -62,6 +63,8 @@ export interface InvoiceCustomerDetails {
 
 export interface SalesDocument {
   id: string
+  version?: number
+  journalEntryId?: string
   kind: DocumentKind
   number: string
   date: string

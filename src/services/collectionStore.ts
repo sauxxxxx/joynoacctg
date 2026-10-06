@@ -52,7 +52,7 @@ export function createCollectionStore<T extends Entity>(repository: EntityReposi
         error.value = errorMessage(cause, 'Reference data could not be loaded.')
         status.value = 'error'
       })
-      .finally(() => { pending = null })
+      .finally(() => { if (current === generation) pending = null })
     return pending
   }
 
@@ -64,13 +64,17 @@ export function createCollectionStore<T extends Entity>(repository: EntityReposi
     ensureLoaded: () => load(false),
     reload: () => load(true),
     async save(record) {
+      const current = generation
       const saved = await repository.save(record)
+      if (current !== generation) return saved
       const exists = rows.value.some((item) => item.id === saved.id)
       rows.value = exists ? rows.value.map((item) => item.id === saved.id ? saved : item) : [...rows.value, saved]
       return saved
     },
     async remove(id, expectedVersion) {
-      await repository.remove(id, expectedVersion)
+      const current = generation
+      await repository.remove(id, expectedVersion ?? rows.value.find((item) => item.id === id)?.version)
+      if (current !== generation) return
       rows.value = rows.value.filter((item) => item.id !== id)
     },
     reset() {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { AlertTriangle, Download, Info, Printer, RotateCw } from '@lucide/vue'
-import { companyAddress, companyDisplayName, companyProfile, isAddOnEnabled, reportingSettings } from '../../company/companyStore'
+import { companyAddress, companyDisplayName, companyProfile, reportTemplates, reportingSettings } from '../../company/companyStore'
 import type { EntryIssue } from './ledgerMath'
 import '../../workspace/workspace.css'
 import './reports.css'
@@ -23,13 +23,20 @@ const signatories = computed(() => [
   { key: 'primary', name: reportingSettings.value.primaryName.trim(), position: reportingSettings.value.primaryPosition.trim() },
   { key: 'secondary', name: reportingSettings.value.secondaryName.trim(), position: reportingSettings.value.secondaryPosition.trim() },
 ].filter((item) => item.name))
-const exportEnabled = computed(() => isAddOnEnabled('report-csv-export'))
+const template = computed(() => reportTemplates.value.find((item) => item.isDefault && item.report === props.title))
 const stamp = () => new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date())
 const generatedAt = ref(stamp())
 // Filters apply immediately, so the report is regenerated whenever its period changes.
 watch(() => props.period, () => { generatedAt.value = stamp() })
 
 function print() {
+  const papers: Record<string, string> = { A4: 'A4', Letter: 'letter', Legal: 'legal' }
+  const paper = papers[template.value?.paperSize || 'A4'] || 'A4'
+  const orientation = template.value?.orientation === 'Landscape' ? 'landscape' : 'portrait'
+  const style = document.createElement('style')
+  style.textContent = `@media print { @page { size: ${paper} ${orientation}; margin: 14mm; } }`
+  document.head.append(style)
+  window.addEventListener('afterprint', () => style.remove(), { once: true })
   window.print()
 }
 </script>
@@ -44,8 +51,8 @@ function print() {
           <slot name="filters" />
           <span class="ws-toolbar__spacer" />
           <slot name="date" />
-          <button v-if="exportEnabled" class="ws-button" type="button" :disabled="!canExport || loading" @click="emit('export')"><Download :size="15" aria-hidden="true" /> Export CSV</button>
-          <button class="ws-button" type="button" :disabled="!canExport || loading" @click="print"><Printer :size="15" aria-hidden="true" /> Print</button>
+          <button class="ws-button" type="button" :disabled="!canExport || loading || Boolean(error)" @click="emit('export')"><Download :size="15" aria-hidden="true" /> Export CSV</button>
+          <button class="ws-button" type="button" :disabled="!canExport || loading || Boolean(error)" @click="print"><Printer :size="15" aria-hidden="true" /> Print</button>
         </div>
       </div>
 
@@ -76,10 +83,12 @@ function print() {
             </p>
             <h2 class="acct-doc__title">{{ title }}</h2>
             <p class="acct-doc__period">{{ period }}</p>
+            <p v-if="template?.headerText" class="acct-doc__period" style="white-space: pre-line">{{ template.headerText }}</p>
           </header>
           <div class="acct-doc__body"><slot /></div>
           <footer class="acct-doc__footer">
-            <div v-if="signatories.length" class="acct-doc__signatories">
+            <p v-if="template?.footerText" class="acct-doc__period" style="white-space: pre-line">{{ template.footerText }}</p>
+            <div v-if="signatories.length && template?.showSignatories !== false" class="acct-doc__signatories">
               <div v-for="item in signatories" :key="item.key"><span class="acct-doc__line" /><strong>{{ item.name }}</strong><small v-if="item.position">{{ item.position }}</small></div>
             </div>
             <p class="acct-doc__generated">Generated {{ generatedAt }}</p>

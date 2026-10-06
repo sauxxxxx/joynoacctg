@@ -3,9 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Download, Plus, Search } from '@lucide/vue'
 import AppPagination from '../../components/ui/AppPagination.vue'
 import AppSelect from '../../components/ui/AppSelect.vue'
-import { useLedger } from '../accounting/reports/useLedger'
-import { createPostedJournals, generatedJournals, type CreateJournalInput } from '../accounting/workflows/accountingWorkflow'
-import { isAddOnEnabled, recordAudit } from '../company/companyStore'
+import { recordAudit } from '../company/companyStore'
 import DateRangeFilter from '../workspace/DateRangeFilter.vue'
 import { customers } from './customers/customerPreviewStore'
 import ReceiptForm from './ReceiptForm.vue'
@@ -17,8 +15,17 @@ import { salesDocuments, setupRecords, type DocumentKind, type SalesDocument } f
 import { invoiceBalanceCents, invoiceStatus, postedReceiptsTotalCents } from './salesRules'
 import { paginate } from '../../lib/tableQuery'
 import './sales-pages.css'
+import { salesDocumentRepository } from '../../services/previewRepositories'
+import { useRecordWorkspace } from '../../services/useRecordWorkspace'
+import { useDocumentReferences } from '../transactions/useDocumentReferences'
+import { useAuth } from '../auth/authStore'
+import { usePermissions } from '../auth/permissions'
 
 const props = defineProps<{ pageId: DocumentKind }>()
+const workspace = useRecordWorkspace(salesDocumentRepository, salesDocuments)
+const references = useDocumentReferences('sales-documents')
+const { authUser } = useAuth()
+const { can } = usePermissions(authUser)
 const titles: Record<DocumentKind, string> = {
   'sales-invoices': 'Invoices',
   'sales-receipts': 'Receipts',
@@ -53,11 +60,10 @@ const customerFilterOptions = computed(() => [{ value: '', label: 'All customers
 type View = 'search' | 'unjournalized' | 'unpaid'
 const view = ref<View>('search')
 const views = computed<{ id: View; label: string }[]>(() => [
-  { id: 'search', label: 'Search' }, { id: 'unjournalized', label: 'Unjournalized' },
+  { id: 'search', label: 'Search' }, ...(!isAcknowledgement.value ? [{ id: 'unjournalized' as View, label: 'Unjournalized' }] : []),
   ...(isInvoice.value ? [{ id: 'unpaid' as View, label: 'Unpaid' }] : []),
 ])
 const selectedIds = ref<string[]>([])
-const ledger = useLedger()
 watch(() => props.pageId, () => {
   view.value = 'search'; selectedIds.value = []; statusFilter.value = 'all'; search.value = ''; customerFilter.value = ''
   editor.value = null; bulkOpen.value = false; notice.value = ''
@@ -66,17 +72,6 @@ watch(() => props.pageId, () => {
 const records = computed(() => salesDocuments.value.filter((item) => item.kind === props.pageId))
 const statusOf = (item: SalesDocument) => item.kind === 'sales-invoices' ? invoiceStatus(item, salesDocuments.value) : item.status
 
-/**
- * A document counts as journalized once a journal entry references its number: Sales Journal for invoices,
- * Cash Receipt Journal for receipts. Assumption pending confirmation: the journal service links entries by reference.
- */
-const journalizedNumbers = computed(() => {
-  const source = isInvoice.value ? 'sales' : 'cash-receipt'
-  return new Set([
-    ...ledger.lines.value.filter((line) => line.source === source).map((line) => line.reference.trim().toLocaleLowerCase()),
-    ...generatedJournals.value.filter((entry) => entry.kind === `${source}-journal`).map((entry) => entry.referenceNumber.trim().toLocaleLowerCase()),
-  ])
-})
 const unpaidAmount = (item: SalesDocument) => invoiceBalanceCents(salesDocuments.value, item)
 const viewTitle = computed(() => {
   if (view.value === 'unjournalized') return `Unjournalized ${isInvoice.value ? 'Sales Invoice' : isAcknowledgement.value ? 'Acknowledgement Receipts' : 'Receipts'}`
@@ -84,7 +79,7 @@ const viewTitle = computed(() => {
   return title.value
 })
 const viewNote = computed(() => {
-  if (view.value === 'unjournalized') return `${isInvoice.value ? 'Issued invoices' : 'Issued receipts'} with no journal entry yet. Every sale must be journalized before it appears in financial reports and tax forms.`
+  if (view.value === 'unjournalized') return 'Documents awaiting a reviewed journal posting. Only posted journals appear in financial reports.'
   if (view.value === 'unpaid') return 'Issued invoices that still have a balance.'
   return `Review and prepare ${title.value.toLocaleLowerCase()}.`
 })
@@ -97,7 +92,7 @@ const visibleRecords = computed(() => {
     if (customerFilter.value && !isAcknowledgement.value && item.customerId !== customerFilter.value) return false
     const status = statusOf(item)
     if (view.value === 'unpaid' && status !== 'Unpaid') return false
-    if (view.value === 'unjournalized' && (!['Unpaid', 'Paid', 'Posted', 'Issued'].includes(status) || journalizedNumbers.value.has(item.number.trim().toLocaleLowerCase()))) return false
+    if (view.value === 'unjournalized' && (item.status === 'Cancelled' || item.journalEntryId)) return false
     if (view.value === 'search' && statusFilter.value !== 'all' && status !== statusFilter.value) return false
     return !term || `${item.number} ${customerName(item.customerId)} ${status} ${item.remarks}`.toLocaleLowerCase().includes(term)
   })
@@ -136,7 +131,7 @@ const columns = computed<Column[]>(() => {
 })
 // Footer totals appear under these columns, as in the legacy screens.
 const totalledColumns: ColumnKey[] = ['amount', 'invoiceTotal', 'totalPaid', 'totalUnpaid']
-const showSelect = computed(() => view.value === 'unjournalized')
+const showSelect = computed(() => false)
 const columnSpan = computed(() => columns.value.length + (showSelect.value ? 1 : 0))
 const allSelected = computed(() => visibleRecords.value.length > 0 && visibleRecords.value.every((item) => selectedIds.value.includes(item.id)))
 
@@ -181,10 +176,10 @@ function setupName(id: string) { return setupRecords.value.find((item) => item.i
 /** Raw numbers for money columns so the exported file can be summed; everything else as shown on screen. */
 function csvValue(item: SalesDocument, key: ColumnKey): string | number {
   switch (key) {
-    case 'amount': return item.amountCents
-    case 'invoiceTotal': return invoiceTotalFor(item)
-    case 'totalPaid': return postedReceiptsTotalCents(salesDocuments.value, item.id)
-    case 'totalUnpaid': return unpaidAmount(item)
+    case 'amount': return item.amountCents / 100
+    case 'invoiceTotal': return invoiceTotalFor(item) / 100
+    case 'totalPaid': return postedReceiptsTotalCents(salesDocuments.value, item.id) / 100
+    case 'totalUnpaid': return unpaidAmount(item) / 100
     case 'remarks': return item.remarks
     case 'date': return item.date
     default: return cellText(item, key)
@@ -219,41 +214,22 @@ function chooseView(next: View) {
   selectedIds.value = []
 }
 function open(doc: SalesDocument | null) {
+  if (workspace.loading.value || references.loading.value || references.error.value || (!doc && !can('Sales', 'create'))) return
   editor.value = { doc }
   notice.value = ''
 }
 function done(message: string) {
   editor.value = null
   notice.value = message
+  void workspace.load()
 }
 function onBulkSaved(count: number) {
   bulkOpen.value = false
   notice.value = `${count} draft invoice${count === 1 ? '' : 's'} added.`
   recordAudit('Sales', 'Created', 'Invoices (bulk)', `${count} draft invoice${count === 1 ? '' : 's'}`)
+  void workspace.load()
 }
 
-function createJournals() {
-  const selected = visibleRecords.value.filter((item) => selectedIds.value.includes(item.id))
-  try {
-    const inputs: CreateJournalInput[] = selected.map((item) => {
-      if (item.amountCents <= 0) throw new Error(`Enter a positive amount for ${item.number}.`)
-      const invoice = item.kind === 'sales-invoices'
-      return {
-        kind: invoice ? 'sales-journal' : 'cash-receipt-journal', sourceKey: `sales:${item.id}`,
-        referenceNumber: item.number, date: item.date, party: customerName(item.customerId), remarks: item.remarks,
-        lines: invoice
-          ? [{ accountId: '103', debitCents: item.amountCents, creditCents: 0 }, { accountId: '401', debitCents: 0, creditCents: item.amountCents }]
-          : [{ accountId: '101', debitCents: item.amountCents, creditCents: 0 }, { accountId: '103', debitCents: 0, creditCents: item.amountCents }],
-      }
-    })
-    const results = createPostedJournals(inputs)
-    const created = results.filter((result) => result.created).length
-    notice.value = created ? `${created} journal ${created === 1 ? 'entry' : 'entries'} created and posted.` : 'The selected documents were already journalized.'
-    selectedIds.value = []
-  } catch (error) {
-    notice.value = error instanceof Error ? error.message : 'The selected documents could not be journalized.'
-  }
-}
 </script>
 
 <template>
@@ -261,6 +237,8 @@ function createJournals() {
   <ReceiptForm v-else-if="editor && !isInvoice" :key="`${pageId}-${editor.doc?.id ?? 'new'}`" :kind="pageId as 'sales-receipts' | 'acknowledgement-receipts'" :receipt="editor.doc" @close="editor = null" @saved="done" @deleted="done" />
   <SalesBulkInvoices v-else-if="isInvoice && bulkOpen" @close="bulkOpen = false" @saved="onBulkSaved" />
   <section v-else class="sales-page" :aria-label="title">
+    <p v-if="workspace.loading.value || references.loading.value" role="status">Loading records…</p>
+    <p v-if="workspace.error.value || references.error.value" class="sales-notice" role="alert">{{ workspace.error.value || references.error.value }} <button type="button" class="sales-button" @click="workspace.load(); references.load()">Retry</button></p>
     <p v-if="notice" class="sales-notice" role="status">{{ notice }}</p>
     <div class="sales-tabs" role="tablist" :aria-label="`${title} views`">
       <button v-for="item in views" :id="`docs-tab-${item.id}`" :key="item.id" type="button" role="tab" class="sales-tabs__tab" :aria-selected="view === item.id" aria-controls="docs-tab-panel" @click="chooseView(item.id)">{{ item.label }}</button>
@@ -273,10 +251,9 @@ function createJournals() {
           <AppSelect v-if="view === 'search'" v-model="statusFilter" aria-label="Filter by status" :options="statusFilterOptions" compact />
           <AppSelect v-if="!isAcknowledgement" v-model="customerFilter" aria-label="Filter by customer" :options="customerFilterOptions" compact />
           <DateRangeFilter v-model="dateRange" :default-value="defaultRange" />
-          <button class="sales-button sales-button--primary" type="button" title="Ctrl+Shift+A" @click="open(null)"><Plus :size="16" aria-hidden="true" /> New {{ singular }}</button>
+          <button v-if="can('Sales', 'create')" class="sales-button sales-button--primary" type="button" title="Ctrl+Shift+A" :disabled="workspace.loading.value || references.loading.value || Boolean(references.error.value)" @click="open(null)"><Plus :size="16" aria-hidden="true" /> New {{ singular }}</button>
           <button class="sales-button" type="button" :disabled="!visibleRecords.length" @click="exportCsv"><Download :size="16" aria-hidden="true" /> Export CSV</button>
-          <button v-if="isInvoice && view !== 'unjournalized' && isAddOnEnabled('bulk-invoice-import')" class="sales-button" type="button" @click="bulkOpen = true">Add multiple</button>
-          <button v-if="showSelect" class="sales-button" type="button" :disabled="!selectedIds.length" @click="createJournals">Create journal</button>
+          <button v-if="isInvoice && can('Sales', 'create')" class="sales-button" type="button" :disabled="workspace.loading.value || references.loading.value || Boolean(references.error.value)" @click="bulkOpen = true">Add multiple</button>
         </div>
       </div>
       <div class="sales-table-wrap">

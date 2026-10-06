@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { loadCompanyAccess, loadCompanySettings } from './companyPersistence'
+import { errorMessage } from '../../services/api/errors'
+import { isPreviewMode } from '../../services/api/config'
+import { useAuth } from '../auth/authStore'
+import { hasPermission } from '../auth/permissions'
 import AddOnsPage from './AddOnsPage.vue'
 import AuditTrailPage from './AuditTrailPage.vue'
 import { recordPages } from './companyRecords'
@@ -16,9 +21,24 @@ import TaxRulesPage from './TaxRulesPage.vue'
 
 const props = defineProps<{ pageId: CompanyPageId }>()
 const recordConfig = computed(() => recordPages[props.pageId])
+const loading = ref(!isPreviewMode && props.pageId !== 'documents')
+const loadError = ref('')
+const { authUser } = useAuth()
+const readOnly = computed(() => ['company-profile', 'company-registration', 'company-recording', 'company-reporting', 'company-tax-rules'].includes(props.pageId) && !hasPermission(authUser.value, 'Company', 'edit'))
+async function load() {
+  loading.value = true
+  loadError.value = ''
+  try { await Promise.all([loadCompanySettings(), loadCompanyAccess()]) }
+  catch (cause) { loadError.value = errorMessage(cause, 'Company information could not be loaded.') }
+  finally { loading.value = false }
+}
+if (!isPreviewMode && props.pageId !== 'documents') void load()
 </script>
 
 <template>
+  <p v-if="loading" role="status">Loading company information…</p>
+  <section v-else-if="loadError" role="alert"><p>{{ loadError }}</p><button type="button" class="ws-button" @click="load">Retry</button></section>
+  <fieldset v-else class="company-page" :disabled="readOnly">
   <ProfilePage v-if="pageId === 'company-profile'" />
   <RegistrationPage v-else-if="pageId === 'company-registration'" />
   <RecordingPage v-else-if="pageId === 'company-recording'" />
@@ -29,4 +49,7 @@ const recordConfig = computed(() => recordPages[props.pageId])
   <AddOnsPage v-else-if="pageId === 'add-ons'" />
   <DocumentsPage v-else-if="pageId === 'documents'" />
   <RecordsPage v-else-if="recordConfig" :config="recordConfig" />
+  </fieldset>
 </template>
+
+<style scoped>.company-page { margin: 0; padding: 0; border: 0; min-width: 0; }</style>

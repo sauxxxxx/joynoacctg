@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ArrowDown, ArrowUp, BookOpen, Download, Filter, RefreshCw, Search } from '@lucide/vue'
 import AppDatePicker from '../../../components/ui/AppDatePicker.vue'
 import AppSelect from '../../../components/ui/AppSelect.vue'
@@ -8,7 +8,7 @@ import { downloadCsv } from '../../../lib/csv'
 import { formatMoney } from '../../../lib/money'
 import { journalSourceLabels } from '../../accounting/reports/ledgerContract'
 import type { BirBooksQuery, BirBookSort } from './birBooksContract'
-import { previewBirBooksService } from './previewBirBooksService'
+import { booksService } from './booksService'
 import './bir-books.css'
 
 const pad = (value: number) => String(value).padStart(2, '0')
@@ -20,7 +20,7 @@ const cloneQuery = (value: BirBooksQuery): BirBooksQuery => ({ ...value, filters
 const applied = ref<BirBooksQuery>(cloneQuery(query.value))
 const filterOpen = ref(false)
 const sourceOptions = [{ value: '', label: 'All books' }, ...Object.entries(journalSourceLabels).map(([value, label]) => ({ value, label }))]
-const resource = useAsyncResource({ load: () => previewBirBooksService.list(applied.value), isEmpty: (value) => value.totalItems === 0 })
+const resource = useAsyncResource({ load: () => booksService.list(applied.value), isEmpty: (value) => value.totalItems === 0 })
 const page = computed(() => resource.data.value)
 const rows = computed(() => page.value?.items ?? [])
 const totalDebit = computed(() => rows.value.reduce((sum, row) => sum + row.debitCents, 0))
@@ -48,7 +48,7 @@ function sortIcon(key: BirBookSort) {
 
 function exportRows() {
   const header = ['Book type', 'Entry #', 'Reference', 'Date', 'Source journal', 'Description', 'Debit', 'Credit']
-  const values = rows.value.map((row) => [row.bookType, row.entryNumber, row.reference, row.date, row.sourceLabel, row.description, formatMoney(row.debitCents), formatMoney(row.creditCents)])
+  const values = rows.value.map((row) => [row.bookType, row.entryNumber, row.reference, row.date, row.sourceLabel, row.description, row.debitCents / 100, row.creditCents / 100])
   downloadCsv(`bir-books-${applied.value.filters.from || 'all'}-${applied.value.filters.to || 'all'}.csv`, [header, ...values])
 }
 
@@ -58,12 +58,13 @@ watch(() => query.value.search, () => {
   searchTimer = window.setTimeout(() => { applied.value = { ...applied.value, page: 1, search: query.value.search }; void resource.run() }, 250)
 })
 onMounted(resource.run)
+onBeforeUnmount(() => { if (searchTimer) window.clearTimeout(searchTimer) })
 </script>
 
 <template>
   <section class="bir-books ws-page" aria-label="BIR books">
     <div class="ws-stack">
-      <p class="ws-note"><BookOpen :size="15" aria-hidden="true" />Read-only posted accounting records. Preview entries come from the sample ledger service.</p>
+      <p class="ws-note"><BookOpen :size="15" aria-hidden="true" />Read-only posted accounting records for review and export. This does not register books or submit official filings.</p>
       <div class="ws-panel ws-panel--clip">
         <div class="ws-toolbar">
           <label class="ws-search"><Search :size="16" aria-hidden="true" /><input v-model="query.search" type="search" placeholder="Search entries" aria-label="Search BIR books" /></label>
@@ -81,7 +82,7 @@ onMounted(resource.run)
         </div>
 
         <div v-if="resource.loading.value" class="ws-loading" role="status"><span class="ws-spinner" aria-hidden="true" />Loading BIR books…</div>
-        <div v-else-if="resource.status.value === 'error'" class="ws-empty" role="alert"><strong>Entries could not be loaded</strong><span>{{ resource.error.value }}</span><button class="ws-button" type="button" @click="resource.run"><RefreshCw :size="15" /> Try again</button></div>
+        <div v-else-if="resource.error.value" class="ws-empty" role="alert"><strong>Entries could not be loaded</strong><span>{{ resource.error.value }}</span><button class="ws-button" type="button" @click="resource.run"><RefreshCw :size="15" /> Try again</button></div>
         <div v-else-if="resource.status.value === 'empty'" class="ws-empty" role="status"><BookOpen class="ws-empty__icon" :size="22" /><strong>No posted entries found</strong><span>Adjust the search, dates, or selected book.</span></div>
         <div v-else class="ws-table-wrap">
           <table class="ws-table bir-books__table">

@@ -8,12 +8,18 @@ import { reportDate, tableAmount } from './salesFormat'
 import { salesDocuments, setupRecords } from './salesPreviewStore'
 import { postedReceiptsTotalCents, receivableInstallments } from './salesRules'
 import './sales-pages.css'
+import { salesDocumentRepository } from '../../services/previewRepositories'
+import { useRecordWorkspace } from '../../services/useRecordWorkspace'
+import { useDocumentReferences } from '../transactions/useDocumentReferences'
+import { downloadCsv, toCsv } from './salesCsv'
 
 type ReportId = 'receivable-schedule' | 'receivable-aging'
 type AgingBucket = 'current' | 'oneToThirty' | 'thirtyOneToSixty' | 'sixtyOneToNinety' | 'overNinety'
 type AgingRow = { customerId: string; name: string; balanceCents: number } & Record<AgingBucket, number>
 
 const props = defineProps<{ pageId: ReportId }>()
+const workspace = useRecordWorkspace(salesDocumentRepository, salesDocuments)
+const references = useDocumentReferences('sales-documents')
 const isAging = computed(() => props.pageId === 'receivable-aging')
 const title = computed(() => isAging.value ? 'Receivable Aging' : 'Receivable Schedule')
 const pad = (value: number) => String(value).padStart(2, '0')
@@ -34,7 +40,7 @@ const balances = computed(() => {
   const reportDate = asOf.value
   if (!reportDate) return []
   return salesDocuments.value
-    .filter((item) => item.kind === 'sales-invoices' && item.status === 'Unpaid' && item.date <= reportDate)
+    .filter((item) => item.kind === 'sales-invoices' && item.journalEntryId && item.status !== 'Cancelled' && item.date <= reportDate)
     .flatMap((invoice) => {
       const term = setupRecords.value.find((record) => record.id === invoice.paymentTermId)
       const collectedCents = postedReceiptsTotalCents(salesDocuments.value, invoice.id, reportDate)
@@ -97,10 +103,17 @@ const totals = computed(() => agingRows.value.reduce((sum, row) => ({
   sixtyOneToNinety: sum.sixtyOneToNinety + row.sixtyOneToNinety,
   overNinety: sum.overNinety + row.overNinety,
 }), { balanceCents: 0, current: 0, oneToThirty: 0, thirtyOneToSixty: 0, sixtyOneToNinety: 0, overNinety: 0 }))
+function exportCsv() {
+  const headers = isAging.value ? ['Customer', ...agingColumns.map((column) => `${column.label} (PHP)`)] : ['Customer', 'Invoice', 'Due date', 'Balance (PHP)']
+  const rows = isAging.value ? agingRows.value.map((row) => [row.name, ...agingColumns.map((column) => row[column.key] / 100)]) : scheduleRows.value.map((row) => [row.name, row.invoiceNumber, row.dueDate, row.balanceCents / 100])
+  downloadCsv(`${props.pageId}-${asOf.value}.csv`, toCsv(headers, rows))
+}
 </script>
 
 <template>
   <section class="sales-page" :aria-label="title">
+    <p v-if="workspace.loading.value || references.loading.value" role="status">Loading report records…</p>
+    <p v-if="workspace.error.value || references.error.value" role="alert">{{ workspace.error.value || references.error.value }} <button type="button" @click="workspace.load(); references.load()">Retry</button></p>
     <div class="sales-panel sales-report">
       <div class="sales-panel__toolbar">
         <div><h2>{{ title }}</h2><p>{{ isAging ? 'See how long invoice balances have been outstanding.' : 'See receivables due in the selected period.' }}</p></div>
@@ -110,6 +123,7 @@ const totals = computed(() => agingRows.value.reduce((sum, row) => ({
             <AppSelect v-model="customerFilter" :options="customerOptions" aria-label="Filter by customer" compact />
           </template>
           <DateRangeFilter v-model="asOfRange" :default-value="defaultAsOf" mode="as-of" />
+          <button type="button" class="sales-button" :disabled="workspace.loading.value || references.loading.value || Boolean(workspace.error.value || references.error.value || monthsError)" @click="exportCsv">Export CSV</button>
         </div>
       </div>
       <div class="sales-report__results">

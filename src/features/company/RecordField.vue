@@ -36,7 +36,7 @@ function onNumber(event: Event) {
       <input :id="id" :value="asText" type="number" :min="field.min ?? 0" :max="field.type === 'percent' ? field.max ?? 100 : field.max" :step="field.step ?? 0.01" :required="field.required" @input="onNumber" />
     </span>
     <input v-else-if="field.type === 'number'" :id="id" :value="asText" type="number" :min="field.min" :max="field.max" :step="field.step ?? 1" :required="field.required" @input="onNumber" />
-    <input v-else :id="id" v-model="asText" :type="field.type === 'email' ? 'email' : 'text'" :required="field.required" :maxlength="field.maxlength ?? 160" :placeholder="field.placeholder" />
+    <input v-else :id="id" v-model="asText" :type="field.type === 'password' ? 'password' : field.type === 'email' ? 'email' : 'text'" :autocomplete="field.type === 'password' ? 'new-password' : undefined" :required="field.required" :maxlength="field.maxlength ?? 160" :placeholder="field.placeholder" />
     <small v-if="field.hint">{{ field.hint }}</small>
   </label>
 </template>

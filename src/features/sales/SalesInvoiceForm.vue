@@ -5,7 +5,6 @@ import AppDatePicker from '../../components/ui/AppDatePicker.vue'
 import AppSelect from '../../components/ui/AppSelect.vue'
 import { decimalToCents } from '../../lib/money'
 import { salesDocumentRepository } from '../../services/previewRepositories'
-import { formatSeriesNumber } from '../company/companyRecords'
 import { documentSeries, goods, otherItems, recordAudit, services } from '../company/companyStore'
 import { customers } from './customers/customerPreviewStore'
 import QuickAddDialogs from './QuickAddDialogs.vue'
@@ -15,9 +14,17 @@ import { salesDocuments, setupRecords, type SalesDocument, type SalesLineItem } 
 import { toInvoiceDraft, type SalesInvoiceDraft, type SalesLineDraft } from './salesFormTypes'
 import { calculateDiscountCents, computeDueDate, summarizeSalesLines } from './salesRules'
 import './sales-pages.css'
+import { useSubmit } from '../../lib/useSubmit'
+import { useAuth } from '../auth/authStore'
+import { usePermissions } from '../auth/permissions'
+import SourceDocumentActions from '../transactions/SourceDocumentActions.vue'
 
 const props = defineProps<{ invoice: SalesDocument | null }>()
 const emit = defineEmits<{ close: []; saved: [message: string] }>()
+const mutation = useSubmit()
+const { authUser } = useAuth()
+const { can } = usePermissions(authUser)
+const readonly = computed(() => Boolean(props.invoice?.journalEntryId) || props.invoice?.status === 'Cancelled' || !can('Sales', props.invoice ? 'edit' : 'create'))
 
 const pad = (value: number) => String(value).padStart(2, '0')
 const today = () => { const date = new Date(); return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` }
@@ -25,13 +32,12 @@ const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value))
 
 // A new invoice takes its number from the active Sales invoice series, when one is set up in Company › Series.
 const invoiceSeries = computed(() => documentSeries.value.find((series) => series.active && series.documentType === 'Sales invoice'))
-const suggestedNumber = props.invoice ? '' : invoiceSeries.value ? formatSeriesNumber(invoiceSeries.value, today()) : ''
 // Like the legacy form, a new invoice starts on the first active payment term.
 const defaultTermId = props.invoice ? '' : setupRecords.value.find((item) => item.kind === 'sales-payment-terms' && item.active)?.id ?? ''
 
 function blankInvoice(): SalesInvoiceDraft {
   return {
-    id: '', kind: 'sales-invoices', number: suggestedNumber, date: today(), customerId: '', status: 'Unpaid',
+    id: '', kind: 'sales-invoices', number: '', date: today(), customerId: '', status: 'Unpaid',
     paymentTermId: defaultTermId, paymentMethodId: '', dueDate: '', amountCents: 0, remarks: '',
     customerDetails: { customerType: 'Company', company: '', tin: '', street: '', locality: '', country: 'Philippines', zipCode: '' },
     discountTypeId: '', discountRate: 0, discountAmountCents: 0, discountInput: 0, lines: [], payments: [], withInvoice: false,
@@ -109,7 +115,7 @@ const discountAmountCents = computed(() => {
   const value = selectedDiscount.value.computation === 'Percentage' ? input : decimalToCents(input) ?? 0
   return calculateDiscountCents(totals.value.amountCents, selectedDiscount.value.computation, value)
 })
-const invoiceTotalCents = computed(() => Math.max(0, totals.value.amountCents - discountAmountCents.value))
+const invoiceTotalCents = computed(() => Math.max(0, totals.value.amountCents - discountAmountCents.value) + totals.value.vatCents)
 const allSelected = computed(() => draft.value.lines.length > 0 && draft.value.lines.every((line) => selectedLines.value.includes(line.id)))
 const customerTypeOptions = [{ value: 'Company', label: 'Company' }, { value: 'Individual', label: 'Individual' }]
 const columnCount = computed(() => 5 + (options.value.wtax ? 2 : 0) + (options.value.vat ? 4 : 0))
@@ -118,7 +124,7 @@ const errors = computed(() => {
   const invoice = draft.value
   const found: Record<string, string> = {}
   const number = invoice.number.trim()
-  if (!number) found.number = 'Cannot be blank'
+  if (!number && (invoice.id || !invoiceSeries.value)) found.number = 'Enter a number or configure an active series'
   else if (salesDocuments.value.some((item) => item.kind === 'sales-invoices' && item.id !== invoice.id && item.number.trim().toLocaleLowerCase() === number.toLocaleLowerCase())) found.number = `Invoice # ${number} is already in use`
   if (!invoice.date) found.date = 'Cannot be blank'
   if (!customers.value.some((customer) => customer.id === invoice.customerId)) found.customerId = 'Choose a customer'
@@ -173,6 +179,7 @@ function chooseDiscount(id: string) {
 }
 
 async function save() {
+  if (readonly.value || mutation.pending.value) return
   submitted.value = true
   const first = Object.values(errors.value)[0] ?? Object.values(lineErrors.value)[0]
   saveError.value = first ? `Please fix the highlighted fields.` : ''
@@ -200,19 +207,16 @@ async function save() {
     discountAmountCents: percentageDiscount ? 0 : discountAmountCents.value,
   }
   delete (invoice as SalesDocument & { discountInput?: number }).discountInput
-  await salesDocumentRepository.save(invoice)
-  const series = invoiceSeries.value
-  if (isNew && series && invoice.number === suggestedNumber) {
-    documentSeries.value = documentSeries.value.map((item) => item.id === series.id ? { ...item, nextNumber: item.nextNumber + 1 } : item)
-  }
+  if (!await mutation.run(async () => { Object.assign(invoice, await salesDocumentRepository.save(invoice)) })) return
   recordAudit('Sales', isNew ? 'Created' : 'Updated', `Invoice: ${invoice.number}`, tableAmount(invoice.amountCents))
   emit('saved', `Invoice ${invoice.number} ${isNew ? 'added' : 'updated'}.`)
 }
 </script>
 
 <template>
-  <SalesEditorShell title="Invoice" :subtitle="invoice ? invoice.number : 'New invoice'" :dirty="dirty" :error="saveError" save-label="Save invoice" @save="save" @close="emit('close')">
+  <SalesEditorShell title="Invoice" :subtitle="invoice ? invoice.number : 'New invoice'" :dirty="dirty" :error="saveError || mutation.error.value" :busy="mutation.pending.value" :readonly="readonly" save-label="Save invoice" @save="save" @close="emit('close')">
     <template #before>
+      <p class="sales-notice sales-notice--info">Invoice total includes the VAT amounts you enter. WTAX and CVAT are recorded for reference; review their account treatment before posting.</p>
       <p v-if="isDraft" class="sales-notice sales-notice--info">This draft came from bulk entry. Saving it issues the invoice as Unpaid.</p>
     </template>
 
@@ -222,6 +226,7 @@ async function save() {
         <label>Invoice # <span>*</span>
           <input ref="numberInput" v-model="draft.number" maxlength="40" autocomplete="off" :aria-invalid="Boolean(shown('number'))" />
           <small v-if="shown('number')" class="sales-field-error">{{ shown('number') }}</small>
+          <small v-else-if="!invoice && invoiceSeries">Leave blank to assign a number on save.</small>
         </label>
         <div class="sales-field"><AppDatePicker id="invoice-date" v-model="draft.date" label="Date" required :invalid="Boolean(shown('date'))" /></div>
         <div class="sales-field-action">
@@ -304,7 +309,8 @@ async function save() {
         <dl>
           <div><dt>Subtotal</dt><dd>{{ tableAmount(totals.amountCents) }}</dd></div>
           <div v-if="selectedDiscount"><dt>Discount</dt><dd>-{{ tableAmount(discountAmountCents) }}</dd></div>
-          <div class="sales-invoice__grand"><dt>Total before tax</dt><dd>{{ tableAmount(invoiceTotalCents) }}</dd></div>
+          <div><dt>Recorded VAT</dt><dd>{{ tableAmount(totals.vatCents) }}</dd></div>
+          <div class="sales-invoice__grand"><dt>Invoice total</dt><dd>{{ tableAmount(invoiceTotalCents) }}</dd></div>
         </dl>
       </div>
     </div>
@@ -320,6 +326,7 @@ async function save() {
         <label>Zip code<input v-model="draft.customerDetails.zipCode" maxlength="12" inputmode="numeric" /></label>
       </div>
     </div>
+    <template #extra-actions><SourceDocumentActions v-if="invoice" :record="invoice" domain="sales-documents" @changed="emit('saved', $event)" /></template>
   </SalesEditorShell>
 
   <QuickAddDialogs ref="quickAdd" @customer="chooseCustomer" @term="draft.paymentTermId = $event" />

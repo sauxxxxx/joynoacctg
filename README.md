@@ -1,6 +1,14 @@
 # Joyno Accounting
 
-Vue 3 frontend for the accounting system. The shared shell contains the sidebar, topbar, navigation search, mobile drawer, and visual tokens. Supabase integration is a later slice.
+Vue 3 frontend for the accounting system. The shared shell contains the sidebar, topbar, navigation search, mobile drawer, and visual tokens. The Node API supports local SQLite and self-hosted PostgreSQL.
+
+The local frontend uses real VPS records by default. The same application is hosted at [joynoadmin.tech](https://joynoadmin.tech); local development proxies its authenticated API through HTTPS. See [workspace setup](docs/CONNECTED_WORKSPACE.md).
+
+The deployment target is the existing Ubuntu KVM 4 VPS, not Supabase. See [PostgreSQL and Ubuntu deployment](docs/KVM4_DEPLOYMENT.md).
+
+The 6 October report release includes company settings/access, journals, financial statements/analytics, dashboard, sales/purchase documents and allocations, tax/payroll record tracking, banking, assets, private files and self-service accounts. Unsupported optional add-ons are hidden; sample adapters are test-only.
+
+The same app is hosted at **https://joynoadmin.tech**, using the real backend without an SSH tunnel. See [domain deployment and rollback notes](docs/DOMAIN_DEPLOYMENT.md).
 
 ## Run locally
 
@@ -20,23 +28,23 @@ Open the local URL printed by Vite. Use `npm.cmd run build` to type-check and cr
 
 Menu selections update the URL, so a page can be linked and reloaded.
 
-## Owner B frontend preview
+## Completion scope
 
-Open **Accounting → Journal Entries → Purchase Journal**, or visit `/?page=purchase-journal`. This page uses labeled sample entries. Date filtering, search, review selection, and entry details work in the browser. **Move to CDJ** remains disabled until the transfer rules and data service are defined.
+The agreed record-tracking workflows are connected and tested. Owner sign-in, review of real company/account mappings, and a portable backup recovery passphrase still require private owner actions. See [completion checklist](docs/COMPLETION_CHECKLIST.md). No absolute security guarantee or official filing/calculation capability is claimed.
 
-## Owner A frontend preview
+## Implemented modules
 
-Sales, Accounting Reports & Analytics, and Company pages. All data is kept in the browser tab and resets on reload until the backend is connected.
+Implemented registers persist in company-scoped PostgreSQL records with server-side permissions and version checks. Payroll/tax scope is manual record tracking and report export, not calculation or official submission.
 
-- **Accounting › Reports** (`src/features/accounting/reports`): General Ledger (Detailed), Trial Balance, Income Statement (Annual, Annual Simplified, Monthly Simplified), Summary of Sales, and Balance Sheet. Each report has period filters, CSV export, and a print layout with the company header and signatories from Company › Profile and Company › Reporting.
+- **Accounting › Reports** (`src/features/accounting/reports`): General Ledger, Trial Balance, Income Statement (Annual, Annual Simplified, Monthly Simplified), and Balance Sheet. Reports have period filters, CSV export, and print layouts with company headers and signatories.
 - **Accounting › Analytics** (`src/features/accounting/analytics`): Assets, Liabilities, Equities, Revenues, and Expenses, each with headline figures, a monthly trend, and a breakdown by category and account.
-- **Company** (`src/features/company`): Profile, Owners, Registration, Recording, Reporting, Tax Rules, Users, Roles, Goods, Services, Others, Message Templates, Series, Report Templates, Audit Trail, Add-ons, and Documents.
+- **Company** (`src/features/company`): Profile, Owners, Registration, Recording, Reporting, Tax Rules, Users, Roles, Goods, Services, Other Items, Message Templates, Series, Report Templates and Audit Trail. Sales numbering is transactional; default report templates affect printing. Message wording can be prepared/copied, but no message-delivery service is configured.
 
 ### Ledger data contract (for the Journal Entries and Chart of Accounts layer)
 
-Reports and analytics read journal data only through `LedgerSource` in `src/features/accounting/reports/ledgerContract.ts`: accounts (code, name, type, category) and journal entries with debit/credit lines in integer centavos. Only `posted` entries are reported. Until a journal service implements it, `useLedger.ts` uses the clearly labeled sample ledger in `sampleLedger.ts`; call `setLedgerSource()` or change the one line in `useLedger.ts` to switch.
+Reports and analytics read real company accounts and journals through `LedgerSource` in `src/features/accounting/reports/ledgerContract.ts`. Amounts are integer centavos. Only posted journal lines affect balances; draft and voided records are excluded. Sample adapters are restricted to tests.
 
-Summary of Sales reads Sales › Invoices directly rather than the ledger.
+Summary of Sales loads fresh saved invoices and defaults to posted sources. Net sales exclude entered VAT. BIR books show posted accounting records for review/export, not an official registration or filing service.
 
 ### Assumptions to confirm
 
@@ -44,4 +52,8 @@ Summary of Sales reads Sales › Invoices directly rather than the ledger.
 - Statements group accounts by account category and show only revenue, expenses, and net income. Gross profit needs a cost-of-sales designation that the category setup does not define yet.
 - Summary of Sales counts Unpaid and Paid invoices (drafts optional, cancelled never). VAT and withholding are listed as entered, not added to net sales.
 - Tax Rules hold rates entered by the team. The app does not supply official rates.
-- Users and Roles are recorded but not enforced, because sign-in is not connected. Audit events are attributed to "Preview session".
+- Users and roles are enforced by the server. Access changes revoke affected sessions, the last administrator is protected, and mutations and audits commit together.
+
+## Backups
+
+Nightly VPS PostgreSQL archives, including private files, are copied to the owner's Windows PC at 07:00 and sign-in, then encrypted and checked. Portable recovery export tools are installed but require a private owner-chosen passphrase. See [backup and recovery instructions](docs/WINDOWS_BACKUPS.md).

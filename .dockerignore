@@ -1,0 +1,10 @@
+node_modules
+dist
+.git
+**/.env*
+**/*.local
+**/*.local.tar.gz
+server/data
+deploy/ubuntu/backups
+.playwright-cli
+output

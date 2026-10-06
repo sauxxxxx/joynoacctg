@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import AppSelect from '../../../components/ui/AppSelect.vue'
 import DateRangeFilter from '../../workspace/DateRangeFilter.vue'
 import { fiscalYearStartMonth } from '../../company/companyStore'
@@ -30,13 +30,16 @@ const margin = computed(() => statement.value.revenue.totalCents
   : '—')
 
 // Monthly variant: twelve months of one fiscal year.
-const currentFiscalYear = fiscalYearStartYear(parseIso(todayIso()), fiscalYearStartMonth.value)
+const currentFiscalYear = computed(() => fiscalYearStartYear(parseIso(todayIso()), fiscalYearStartMonth.value))
 const yearLabel = (year: number) => fiscalYearStartMonth.value === 1 ? String(year) : `FY ${year}–${year + 1}`
 const yearOptions = computed(() => Array.from({ length: 5 }, (_, index) => {
-  const year = currentFiscalYear - index
+  const year = currentFiscalYear.value - index
   return { value: String(year), label: yearLabel(year) }
 }))
-const selectedYear = ref(String(currentFiscalYear))
+const selectedYear = ref(String(currentFiscalYear.value))
+watch(currentFiscalYear, (next, previous) => {
+  if (selectedYear.value === String(previous)) selectedYear.value = String(next)
+})
 const months = computed(() => fiscalYearMonths(Number(selectedYear.value), fiscalYearStartMonth.value))
 const monthly = computed(() => monthlyIncomeStatement(ledger.accounts.value, ledger.lines.value, months.value))
 

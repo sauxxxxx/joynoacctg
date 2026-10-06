@@ -1,0 +1,10 @@
+services:
+  migrate:
+    image: joyno-accounting-api:verify-20261006-03
+  api:
+    image: joyno-accounting-api:verify-20261006-03
+    read_only: true
+    tmpfs: ['/tmp:rw,noexec,nosuid,size=16m']
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    pids_limit: 128

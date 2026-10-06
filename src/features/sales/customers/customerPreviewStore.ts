@@ -4,6 +4,7 @@ export type CustomerType = 'Company' | 'Individual'
 
 export interface Customer {
   id: string
+  version?: number
   customerType: CustomerType
   /** Company name, or the person's full name for an individual. */
   name: string

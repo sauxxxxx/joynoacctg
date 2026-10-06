@@ -110,3 +110,9 @@
   .login-submit, .login-input { transition: none; }
   .login-submit__spinner { animation-duration: 1.5s; }
 }
+.workspace-choice { margin-bottom: 24px; }
+.workspace-choice > div { display: flex; gap: 8px; }
+.workspace-choice button { flex: 1; padding: 10px; border: 1px solid var(--border); border-radius: 6px; background: #fff; color: var(--ink); font-size: 12px; }
+.workspace-choice button[aria-pressed="true"] { background: #26313b; color: #fff; border-color: #26313b; }
+.workspace-choice button:disabled { opacity: .55; cursor: not-allowed; }
+.workspace-choice p { margin: 10px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); }

@@ -1,20 +1,24 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { Building2, ChevronDown, CircleHelp, Info, KeyRound, LogOut, SlidersHorizontal, UserRound } from '@lucide/vue'
+import { Building2, ChevronDown, CircleHelp, Info, KeyRound, LogOut, UserRound } from '@lucide/vue'
+import AccountDialog from '../features/auth/AccountDialog.vue'
 import type { AuthUser } from '../features/auth/authTypes'
 import { usePermissions } from '../features/auth/permissions'
+import { supportsWorkspacePage } from '../services/api/config'
 
 const props = defineProps<{ user: AuthUser }>()
 const emit = defineEmits<{ navigate: [id: string]; logout: [] }>()
 
 const open = ref(false)
 const notice = ref('')
+const accountDialog = ref<'profile' | 'password' | null>(null)
+function openAccount(mode: 'profile' | 'password') { closeMenu(); accountDialog.value = mode }
 const container = ref<HTMLElement | null>(null)
 const trigger = ref<HTMLButtonElement | null>(null)
 const firstItem = ref<HTMLButtonElement | null>(null)
 const initials = computed(() => props.user.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toLocaleUpperCase())
 const { can } = usePermissions(() => props.user)
-const canManageCompany = computed(() => can('Company', 'edit'))
+const canManageCompany = computed(() => can('Company', 'edit') && supportsWorkspacePage('company-profile'))
 
 function toggleMenu() {
   open.value = !open.value
@@ -88,9 +92,8 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="account-menu__section">
-        <button ref="firstItem" type="button" role="menuitem" @click="showNotice(`Signed in as ${user.name} / ${user.role}.`)"><UserRound :size="17" /><span>My Profile</span></button>
-        <button type="button" role="menuitem" @click="showNotice('Password changes are managed by your system administrator.')"><KeyRound :size="17" /><span>Change Password</span></button>
-        <button type="button" role="menuitem" @click="showNotice('Personal preferences are not configured in this internal preview.')"><SlidersHorizontal :size="17" /><span>Preferences</span></button>
+        <button ref="firstItem" type="button" role="menuitem" @click="openAccount('profile')"><UserRound :size="17" /><span>My Profile</span></button>
+        <button type="button" role="menuitem" @click="openAccount('password')"><KeyRound :size="17" /><span>Change Password</span></button>
         <button v-if="canManageCompany" type="button" role="menuitem" @click="navigate('company-profile')"><Building2 :size="17" /><span>Company Settings</span><small>Authorized</small></button>
       </div>
 
@@ -106,4 +109,5 @@ onBeforeUnmount(() => {
       </div>
     </div>
   </div>
+  <AccountDialog :mode="accountDialog" @close="accountDialog = null" />
 </template>

@@ -8,10 +8,21 @@ import TaxCertificateEditor from './TaxCertificateEditor.vue'
 import { taxCertificateRecords, type TaxCertificateId, type TaxCertificateRecord } from './taxCertificateData'
 import { taxCertificateRepository } from '../../../services/previewRepositories'
 import { recordAudit } from '../../company/companyStore'
+import { useRecordWorkspace } from '../../../services/useRecordWorkspace'
+import { useAuth } from '../../auth/authStore'
+import { usePermissions } from '../../auth/permissions'
+import { confirmAction } from '../../../services/dialogService'
+import { exportTaxCertificates } from './taxExports'
 import './taxForms.css'
 
 const props = defineProps<{ formId: TaxCertificateId }>()
-const tabs = ['Draft', 'Search', 'Required Entries'] as const
+const persistence = useRecordWorkspace(taxCertificateRepository, taxCertificateRecords)
+const { loading, busy, error } = persistence
+const permissions = usePermissions(useAuth().authUser)
+const canCreate = computed(() => permissions.can('Government', 'create') && !loading.value && !busy.value)
+const canEdit = computed(() => permissions.can('Government', 'edit') && !loading.value && !busy.value)
+const canDelete = computed(() => permissions.can('Government', 'delete') && !loading.value && !busy.value)
+const tabs = ['Draft', 'Search', 'By Month'] as const
 type Tab = typeof tabs[number]
 const activeTab = ref<Tab>('Draft')
 const query = ref('')
@@ -20,12 +31,16 @@ const filtersOpen = ref(false)
 const filterControl = ref<HTMLElement | null>(null)
 const filterButton = ref<HTMLButtonElement | null>(null)
 const source = ref('')
-const fromDate = ref('2026-09-01')
-const toDate = ref('2026-09-30')
-const month = ref('September')
-const year = ref(2026)
+const today = new Date()
+const currentMonth = new Intl.DateTimeFormat('en-US', { month: 'long' }).format(today)
+const currentRange = { from: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`, to: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()).padStart(2, '0')}` }
+const fromDate = ref(currentRange.from)
+const toDate = ref(currentRange.to)
+const month = ref(currentMonth)
+const year = ref(today.getFullYear())
 const selectedId = ref('')
 const editorOpen = ref(false)
+const editing = ref<TaxCertificateRecord | null>(null)
 const notice = ref('')
 const title = computed(() => props.formId.replace('form-', ''))
 const records = computed(() => taxCertificateRecords.value.filter((record) => record.formId === props.formId))
@@ -46,18 +61,33 @@ const sourceSelectOptions = [{ value: '', label: 'All sources' }, ...sourceOptio
 const monthOptions = months.map((value) => ({ value, label: value }))
 
 function selectTab(tab: Tab) { activeTab.value = tab; selectedId.value = ''; filtersOpen.value = false; notice.value = '' }
-async function saveRecord(record: TaxCertificateRecord) { const saved = await taxCertificateRepository.save(record); selectedId.value = saved.id; notice.value = `${title.value} draft created.` }
+function openEditor(record: TaxCertificateRecord | null = null) {
+  if (record ? !canEdit.value : !canCreate.value) return
+  editing.value = record; error.value = ''; editorOpen.value = true
+}
+async function saveRecord(record: TaxCertificateRecord) {
+  const saved = await persistence.save(record)
+  if (!saved) return
+  selectedId.value = saved.id; editorOpen.value = false; notice.value = `${title.value} certificate saved.`
+}
 function displayDate(value: string) { const [y, m, d] = value.split('-'); return y && m && d ? `${m}/${d}/${y}` : '—' }
 function closeFilters() { filtersOpen.value = false; nextTick(() => filterButton.value?.focus()) }
-function resetFilters() { source.value = ''; fromDate.value = '2026-09-01'; toDate.value = '2026-09-30'; month.value = 'September'; year.value = 2026; closeFilters() }
+function resetFilters() { source.value = ''; fromDate.value = currentRange.from; toDate.value = currentRange.to; month.value = currentMonth; year.value = today.getFullYear(); closeFilters() }
 async function receiveOrSend() {
   const index = taxCertificateRecords.value.findIndex((record) => record.id === selectedId.value)
-  if (index < 0) return
+  if (index < 0 || !canEdit.value) return
   const record = taxCertificateRecords.value[index]
+  if (record.status === 'Sent') return
   const status = record.status === 'Draft' ? 'Received' : 'Sent'
-  await taxCertificateRepository.save({ ...record, status })
+  if (!await persistence.save({ ...record, status })) return
   recordAudit('Government', status, title.value, `${record.party} · ${record.date}`)
   notice.value = `${title.value} marked as ${status.toLocaleLowerCase()}.`
+}
+async function removeSelected() {
+  const record = records.value.find((item) => item.id === selectedId.value)
+  if (!record || !canDelete.value || record.status !== 'Draft') return
+  if (!await confirmAction({ title: 'Delete certificate draft?', message: `${record.party}'s draft will be removed.`, confirmLabel: 'Delete', destructive: true })) return
+  if (await persistence.remove(record)) { selectedId.value = ''; notice.value = 'Draft deleted.' }
 }
 function onOutside(event: PointerEvent) { if (filtersOpen.value && event.target instanceof Node && !filterControl.value?.contains(event.target) && !(event.target instanceof Element && event.target.closest('.ui-date-picker__panel'))) filtersOpen.value = false }
 function onKeydown(event: KeyboardEvent) { if (event.key === 'Escape' && filtersOpen.value) closeFilters() }
@@ -72,22 +102,26 @@ onBeforeUnmount(() => { document.removeEventListener('pointerdown', onOutside); 
       <div class="tax-form-toolbar__actions">
         <label class="tax-search"><Search :size="15" aria-hidden="true" /><input v-model="query" type="search" placeholder="Type to filter" :aria-label="`Search ${title} certificates`" /></label>
         <div ref="filterControl" class="tax-filter-control"><button ref="filterButton" type="button" class="tax-icon-button" :aria-expanded="filtersOpen" aria-label="Open certificate filters" @click="filtersOpen = !filtersOpen"><ListFilter :size="17" /></button>
-          <aside v-if="filtersOpen" class="tax-filter-popover" aria-label="Certificate filters"><strong>{{ activeTab }} filters</strong><AppSelect v-model="source" label="Source" :options="sourceSelectOptions" /><template v-if="activeTab === 'Search'"><AppDatePicker v-model="fromDate" label="From" /><AppDatePicker v-model="toDate" label="To" /></template><template v-else-if="activeTab === 'Required Entries'"><AppSelect v-model="month" label="Month" :options="monthOptions" /><label>Year<input v-model.number="year" type="number" min="2000" max="2100" /></label></template><div><button type="button" class="tax-button" @click="resetFilters">Reset</button><button type="button" class="tax-button tax-button--primary" @click="closeFilters">Apply</button></div></aside>
+          <aside v-if="filtersOpen" class="tax-filter-popover" aria-label="Certificate filters"><strong>{{ activeTab }} filters</strong><AppSelect v-model="source" label="Source" :options="sourceSelectOptions" /><template v-if="activeTab === 'Search'"><AppDatePicker v-model="fromDate" label="From" /><AppDatePicker v-model="toDate" label="To" /></template><template v-else-if="activeTab === 'By Month'"><AppSelect v-model="month" label="Month" :options="monthOptions" /><label>Year<input v-model.number="year" type="number" min="2000" max="2100" /></label></template><div><button type="button" class="tax-button" @click="resetFilters">Reset</button><button type="button" class="tax-button tax-button--primary" @click="closeFilters">Apply</button></div></aside>
         </div>
-        <button type="button" class="tax-button" @click="editorOpen = true">Create tax certificate manually</button>
-        <button type="button" class="tax-button" :disabled="!selectedId" @click="receiveOrSend">Receive / send</button>
+        <button type="button" class="tax-button" :disabled="loading || busy || Boolean(error)" @click="exportTaxCertificates(formId, visibleRows)">Export CSV</button>
+        <button type="button" class="tax-button" :disabled="!canCreate" @click="openEditor()">Record certificate</button>
+        <button type="button" class="tax-button" :disabled="!selectedId || !canEdit || records.find(row => row.id === selectedId)?.status === 'Sent'" @click="receiveOrSend">Mark received / sent</button>
+        <button type="button" class="tax-button" :disabled="!selectedId || !canDelete || records.find(row => row.id === selectedId)?.status !== 'Draft'" @click="removeSelected">Delete draft</button>
         <button type="button" class="tax-icon-button" :aria-pressed="compact" aria-label="Toggle compact rows" @click="compact = !compact"><LayoutGrid :size="18" /></button>
       </div>
     </header>
     <p v-if="notice" class="tax-notice" role="status">{{ notice }}</p>
+    <p v-if="loading" class="tax-notice" role="status">Loading certificates…</p>
+    <p v-if="error" class="tax-entry-editor__error" role="alert">{{ error }} <button type="button" class="tax-button" :disabled="busy" @click="persistence.load">Reload</button></p>
     <div class="tax-table-wrap" :class="{ 'tax-table-wrap--compact': compact }">
       <table class="tax-table tax-certificate-table">
-        <thead><tr><th>Source</th><th>Vendor/Customer</th><th v-if="activeTab !== 'Required Entries'">Status</th><th v-if="activeTab === 'Required Entries'">Date</th><th class="tax-table__number">Amount</th><th v-if="activeTab === 'Search'">Date</th><th v-if="activeTab !== 'Required Entries'">From</th><th v-if="activeTab !== 'Required Entries'">To</th><th v-if="activeTab === 'Required Entries'">TIN</th><th v-else>Signed file</th></tr></thead>
-        <tbody><tr v-for="record in visibleRows" :key="record.id" :class="{ 'tax-table__selected': selectedId === record.id }" :aria-selected="selectedId === record.id" @click="selectedId = record.id"><td>{{ record.source }}</td><td>{{ record.party }}</td><td v-if="activeTab !== 'Required Entries'"><span class="tax-status" :class="`tax-status--${record.status.toLocaleLowerCase()}`">{{ record.status }}</span></td><td v-if="activeTab === 'Required Entries'">{{ displayDate(record.date) }}</td><td class="tax-table__number">{{ formatMoney(record.amountCents) }}</td><td v-if="activeTab === 'Search'">{{ displayDate(record.date) }}</td><td v-if="activeTab !== 'Required Entries'">{{ displayDate(record.fromDate) }}</td><td v-if="activeTab !== 'Required Entries'">{{ displayDate(record.toDate) }}</td><td v-if="activeTab === 'Required Entries'">{{ record.tin || '—' }}</td><td v-else>{{ record.signedFile || '—' }}</td></tr></tbody>
+        <thead><tr><th>Source</th><th>Vendor/Customer</th><th>Status</th><th class="tax-table__number">Amount</th><th>Date</th><th>From</th><th>To</th><th>TIN</th><th>Signed file reference</th></tr></thead>
+        <tbody><tr v-for="record in visibleRows" :key="record.id" :class="{ 'tax-table__selected': selectedId === record.id }" :aria-selected="selectedId === record.id" @click="selectedId = record.id"><td>{{ record.source }}</td><td><button type="button" class="tax-table__link" :disabled="!canEdit" @click.stop="openEditor(record)">{{ record.party }}</button></td><td><span class="tax-status" :class="`tax-status--${record.status.toLocaleLowerCase()}`">{{ record.status }}</span></td><td class="tax-table__number">{{ formatMoney(record.amountCents) }}</td><td>{{ displayDate(record.date) }}</td><td>{{ displayDate(record.fromDate) }}</td><td>{{ displayDate(record.toDate) }}</td><td>{{ record.tin || '—' }}</td><td>{{ record.signedFile || '—' }}</td></tr></tbody>
       </table>
-      <div v-if="!visibleRows.length" class="tax-empty" role="status"><strong>No rows to show</strong><p>{{ activeTab === 'Draft' ? 'Create a certificate manually to begin.' : 'No certificates match the selected filters.' }}</p><button v-if="activeTab === 'Draft'" type="button" class="tax-button" @click="editorOpen = true">Create draft</button></div>
+      <div v-if="!loading && !error && !visibleRows.length" class="tax-empty" role="status"><strong>No rows to show</strong><p>{{ activeTab === 'Draft' ? 'Record a certificate to begin.' : 'No certificates match the selected filters.' }}</p><button v-if="activeTab === 'Draft' && canCreate" type="button" class="tax-button" @click="openEditor()">Record certificate</button></div>
       <footer><span>{{ visibleRows.length }} {{ visibleRows.length === 1 ? 'certificate' : 'certificates' }}</span><span>{{ activeTab }} · {{ formatMoney(visibleRows.reduce((sum, row) => sum + row.amountCents, 0)) }}</span></footer>
     </div>
-    <TaxCertificateEditor :open="editorOpen" :form-id="formId" @close="editorOpen = false" @save="saveRecord" />
+    <TaxCertificateEditor :open="editorOpen" :record="editing" :busy="busy" :server-error="error" :form-id="formId" @close="editorOpen = false" @save="saveRecord" />
   </section>
 </template>

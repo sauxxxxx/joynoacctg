@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Download, FileClock, Info, Search } from '@lucide/vue'
+import { Download, FileClock, Search } from '@lucide/vue'
+import { auditRepository } from './auditLog'
+import { errorMessage } from '../../services/api/errors'
+import { getApiCredentials } from '../../services/api/session'
 import AppSelect from '../../components/ui/AppSelect.vue'
 import { downloadCsv } from '../accounting/reports/reportFormat'
 import DateRangeFilter from '../workspace/DateRangeFilter.vue'
@@ -15,6 +18,17 @@ const action = ref('')
 const allDates = { from: '', to: '' }
 const range = ref({ ...allDates })
 const shown = ref(pageSize)
+const loading = ref(false)
+const loadError = ref('')
+async function load() {
+  const token = getApiCredentials()?.accessToken
+  loading.value = true
+  loadError.value = ''
+  try { const records = await auditRepository.listAll(); if (token === getApiCredentials()?.accessToken) auditEvents.value = records }
+  catch (cause) { loadError.value = errorMessage(cause, 'The audit trail could not be loaded.') }
+  finally { loading.value = false }
+}
+void load()
 
 const localDay = (iso: string) => {
   const date = new Date(iso)
@@ -59,8 +73,9 @@ function exportCsv() {
 <template>
   <section class="ws-page co-page" aria-label="Audit trail">
     <div class="ws-stack">
-      <p class="co-intro">A record of changes made in Sales, Company, and report exports during this session, newest first.</p>
-      <p class="ws-note"><Info :size="14" aria-hidden="true" />Events are kept in this tab until the backend is connected. There is no sign-in yet, so the user is shown as “Preview session”.</p>
+      <p class="co-intro">A history of changes to your company records, newest first.</p>
+      <p v-if="loading" role="status">Loading activity…</p>
+      <div v-if="loadError" role="alert"><p>{{ loadError }}</p><button type="button" class="ws-button" @click="load">Retry</button></div>
 
       <div class="ws-panel ws-panel--clip">
         <div class="ws-toolbar">

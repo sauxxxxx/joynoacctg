@@ -4,12 +4,21 @@ import { ChevronDown, ChevronRight, LayoutGrid, ListFilter, Plus, Search } from 
 import { confirmAction, showAlert } from '../../../services/dialogService'
 import { errorMessage } from '../../../services/api/errors'
 import { useCollections } from '../../../services/collectionStore'
+import { isPreviewMode } from '../../../services/api/config'
+import { useAuth } from '../../auth/authStore'
+import { usePermissions } from '../../auth/permissions'
 import AccountSetupEditor from './AccountSetupEditor.vue'
 import { accountStore, categoryStore, accounts, categories, categoryName, type Account, type AccountCategory } from './accountSetupData'
 import './accountSetup.css'
 
 const props = defineProps<{ pageId: 'chart-of-accounts' | 'account-categories' }>()
-useCollections(accountStore, categoryStore)
+const { loading, error: loadError, retry } = useCollections(accountStore, categoryStore)
+const { authUser } = useAuth()
+const { can } = usePermissions(authUser)
+const busy = ref(false)
+const saveError = ref('')
+const canSave = computed(() => can('Accounting', editing.value ? 'edit' : 'create'))
+const canDelete = computed(() => can('Accounting', 'delete'))
 type Tab = 'accounts' | 'tree' | 'mapping'
 type TreeRow = { key: string; code: string; name: string; depth: number; group: boolean; expandable: boolean }
 const tab = ref<Tab>('accounts')
@@ -47,27 +56,32 @@ const treeRows = computed<TreeRow[]>(() => {
   return rows
 })
 
-function openEditor(record: Account | AccountCategory | null = null) { editing.value = record; editorOpen.value = true }
+function openEditor(record: Account | AccountCategory | null = null) { if (loading.value || loadError.value) return; editing.value = record; saveError.value = ''; editorOpen.value = true }
+async function persist(operation: () => Promise<unknown>) {
+  if (busy.value) return
+  busy.value = true
+  saveError.value = ''
+  try { await operation(); editorOpen.value = false }
+  catch (cause) { saveError.value = errorMessage(cause, 'The record could not be saved. Your draft is still here.') }
+  finally { busy.value = false }
+}
 async function saveAccount(record: Account) {
-  try { await accountStore.save(record) }
-  catch (cause) { await showAlert({ title: 'Account not saved', message: errorMessage(cause, 'The account could not be saved.') }) }
+  if (canSave.value) await persist(() => accountStore.save(record))
 }
 async function saveCategory(record: AccountCategory) {
-  try { await categoryStore.save(record) }
-  catch (cause) { await showAlert({ title: 'Category not saved', message: errorMessage(cause, 'The category could not be saved.') }) }
+  if (canSave.value) await persist(() => categoryStore.save(record))
 }
 async function removeRecord() {
   const record = editing.value
-  if (!record) return
+  if (!record || busy.value || !canDelete.value) return
   if (isCategories.value && (categories.value.some((item) => item.parentCode === record.code) || accounts.value.some((item) => item.parentCode === record.code))) {
     await showAlert({ title: 'Category is in use', message: 'Move or remove child categories and accounts before deleting this category.' })
     return
   }
-  if (!await confirmAction({ title: 'Delete account record?', message: `${record.code} · ${record.name} will be removed from this preview.`, confirmLabel: 'Delete', destructive: true })) return
-  if (isCategories.value) await categoryStore.remove(record.id)
-  else await accountStore.remove(record.id)
-  editorOpen.value = false
+  if (!await confirmAction({ title: 'Delete account record?', message: `${record.code} · ${record.name} will be removed from your company records.`, confirmLabel: 'Delete', destructive: true })) return
+  await persist(() => isCategories.value ? categoryStore.remove(record.id, record.version) : accountStore.remove(record.id, record.version))
 }
+function refresh() { void Promise.all([accountStore.reload(), categoryStore.reload()]) }
 function toggleExpanded(code: string) { expanded.value = expanded.value.includes(code) ? expanded.value.filter((item) => item !== code) : [...expanded.value, code] }
 </script>
 
@@ -80,11 +94,14 @@ function toggleExpanded(code: string) { expanded.value = expanded.value.includes
       <div v-if="isCategories || tab !== 'tree'" class="setup-toolbar__actions">
         <label class="setup-search"><Search :size="15" aria-hidden="true" /><input v-model="search" type="search" :aria-label="`Search ${title}`" placeholder="Type to filter" /></label>
         <button type="button" class="setup-icon-button" :aria-pressed="activeOnly" :title="activeOnly ? 'Show all records' : 'Show active only'" aria-label="Toggle active filter" @click="activeOnly = !activeOnly"><ListFilter :size="17" /></button>
-        <button type="button" class="setup-button setup-button--primary" @click="openEditor()"><Plus :size="16" aria-hidden="true" /> New {{ isCategories ? 'category' : 'account' }}</button>
+        <button type="button" class="setup-button" :disabled="loading || busy || editorOpen" @click="refresh">Reload</button>
+        <button v-if="can('Accounting', 'create')" type="button" class="setup-button setup-button--primary" :disabled="loading || Boolean(loadError) || busy" @click="openEditor()"><Plus :size="16" aria-hidden="true" /> New {{ isCategories ? 'category' : 'account' }}</button>
         <button type="button" class="setup-icon-button" :aria-pressed="compact" title="Toggle compact rows" aria-label="Toggle compact rows" @click="compact = !compact"><LayoutGrid :size="18" /></button>
       </div>
     </header>
-    <div v-if="!isCategories && tab === 'tree'" class="setup-tree" role="tree" aria-label="Account tree">
+    <p v-if="loading" class="setup-empty" role="status">Loading company records…</p>
+    <div v-else-if="loadError" class="setup-empty" role="alert"><p>{{ loadError }}</p><button type="button" class="setup-button" @click="retry">Retry</button></div>
+    <div v-else-if="!isCategories && tab === 'tree'" class="setup-tree" role="tree" aria-label="Account tree">
       <div v-for="row in treeRows" :key="row.key" class="setup-tree__row" :class="{ 'setup-tree__row--account': !row.group }" :style="{ paddingLeft: `${20 + row.depth * 28}px` }" role="treeitem" :aria-level="row.depth + 1" :aria-expanded="row.group && row.expandable ? expanded.includes(row.code) : undefined">
         <button v-if="row.group && row.expandable" type="button" class="setup-tree__expand" :aria-label="`${expanded.includes(row.code) ? 'Collapse' : 'Expand'} ${row.name}`" @click="toggleExpanded(row.code)"><ChevronDown v-if="expanded.includes(row.code)" :size="15" /><ChevronRight v-else :size="15" /></button>
         <span v-else class="setup-tree__spacer" />
@@ -107,9 +124,9 @@ function toggleExpanded(code: string) { expanded.value = expanded.value.includes
           <template v-else><td>{{ categoryName(item.parentCode) }}</td><td>{{ 'type' in item ? item.type : '' }}</td><td>{{ item.remarks }}</td></template>
           <td><input type="checkbox" :checked="item.active" disabled :aria-label="`${item.name} ${item.active ? 'active' : 'inactive'}`" /></td>
         </tr>
-      </tbody></table><p v-if="!(isCategories ? visibleCategories : visibleAccounts).length" class="setup-empty">No matching records.</p></div>
+      </tbody></table><p v-if="!(isCategories ? visibleCategories : visibleAccounts).length" class="setup-empty">{{ !isPreviewMode && !categories.length ? 'Your company has no account categories yet. Create a category first, then add accounts.' : 'No matching records.' }}</p></div>
       <footer class="setup-table-area__footer"><span>{{ (isCategories ? visibleCategories : visibleAccounts).length }} {{ isCategories ? 'categories' : 'accounts' }}</span></footer>
     </div>
-    <AccountSetupEditor :open="editorOpen" :kind="isCategories ? 'category' : 'account'" :record="editing" @close="editorOpen = false" @save-account="saveAccount" @save-category="saveCategory" @delete="removeRecord" />
+    <AccountSetupEditor :open="editorOpen" :kind="isCategories ? 'category' : 'account'" :record="editing" :busy="busy" :server-error="saveError" :can-save="canSave" :can-delete="canDelete" @close="editorOpen = false" @save-account="saveAccount" @save-category="saveCategory" @delete="removeRecord" />
   </section>
 </template>

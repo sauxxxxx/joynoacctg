@@ -4,6 +4,11 @@ import { LayoutGrid, ListFilter, Plus, Search } from '@lucide/vue'
 import { accountName } from '../../accounting/setup/accountSetupData'
 import { confirmAction, showAlert } from '../../../services/dialogService'
 import { purchaseSetupRepository } from '../../../services/previewRepositories'
+import { useRecordWorkspace } from '../../../services/useRecordWorkspace'
+import { useCollections } from '../../../services/collectionStore'
+import { accountStore } from '../../accounting/setup/accountSetupData'
+import { useAuth } from '../../auth/authStore'
+import { usePermissions } from '../../auth/permissions'
 import PurchaseSetupEditor from './PurchaseSetupEditor.vue'
 import { purchaseSetupRecords, purchaseSetupTitles, type PurchaseSetupKind, type PurchaseSetupRecord } from './purchaseSetupData'
 import './purchaseSetup.css'
@@ -17,6 +22,11 @@ const searchInput = ref<HTMLInputElement | null>(null)
 const editorOpen = ref(false)
 const editing = ref<PurchaseSetupRecord | null>(null)
 const notice = ref('')
+const workspace = useRecordWorkspace(purchaseSetupRepository, purchaseSetupRecords)
+const references = useCollections(accountStore)
+const { authUser } = useAuth()
+const { can } = usePermissions(authUser)
+const editable = computed(() => can('Purchases', editing.value ? 'edit' : 'create'))
 const title = computed(() => purchaseSetupTitles[props.pageId])
 const rows = computed(() => purchaseSetupRecords.value.filter((item) => item.kind === props.pageId))
 const visibleRows = computed(() => {
@@ -27,18 +37,24 @@ function selectVendorTab(tab: 'vendors' | 'search') {
   vendorTab.value = tab
   if (tab === 'search') nextTick(() => searchInput.value?.focus())
 }
-function openEditor(record: PurchaseSetupRecord | null = null) { editing.value = record; editorOpen.value = true; notice.value = '' }
+function openEditor(record: PurchaseSetupRecord | null = null) {
+  if (workspace.loading.value || workspace.busy.value || (!record && !can('Purchases', 'create'))) return
+  editing.value = record; editorOpen.value = true; notice.value = ''
+}
 async function saveRecord(record: PurchaseSetupRecord) {
+  if (!editable.value || workspace.busy.value) return
   if (rows.value.some((item) => item.id !== record.id && item.name.toLocaleLowerCase() === record.name.toLocaleLowerCase())) {
     await showAlert({ title: 'Duplicate name', message: 'This name is already in use.' })
     return
   }
-  await purchaseSetupRepository.save(record)
+  if (!await workspace.save(record)) return
+  editorOpen.value = false
   notice.value = `${record.name} saved.`
 }
 async function deleteRecord(record: PurchaseSetupRecord) {
-  if (!await confirmAction({ title: 'Delete setup record?', message: `${record.name} will be removed from this preview.`, confirmLabel: 'Delete', destructive: true })) return
-  await purchaseSetupRepository.remove(record.id)
+  if (!can('Purchases', 'delete') || workspace.busy.value) return
+  if (!await confirmAction({ title: 'Delete setup record?', message: `${record.name} will be deleted.`, confirmLabel: 'Delete', destructive: true })) return
+  if (!await workspace.remove(record)) return
   editorOpen.value = false
   notice.value = `${record.name} deleted.`
 }
@@ -46,13 +62,15 @@ async function deleteRecord(record: PurchaseSetupRecord) {
 
 <template>
   <section class="purchase-setup-page" :aria-label="title">
+    <p v-if="workspace.loading.value || references.loading.value" role="status">Loading setup records…</p>
+    <p v-if="workspace.error.value || references.error.value" role="alert">{{ workspace.error.value || references.error.value }} <button type="button" @click="workspace.load(); references.retry()">Retry</button></p>
     <header class="purchase-setup-toolbar">
       <nav v-if="pageId === 'vendors'" class="purchase-setup-tabs" aria-label="Vendor views"><button type="button" :class="{ 'purchase-setup-tabs__active': vendorTab === 'vendors' }" @click="selectVendorTab('vendors')">Vendors</button><button type="button" :class="{ 'purchase-setup-tabs__active': vendorTab === 'search' }" @click="selectVendorTab('search')">Search</button></nav>
       <h2 v-else>{{ title }}</h2>
       <div class="purchase-setup-toolbar__actions">
         <label class="purchase-setup-search"><Search :size="15" aria-hidden="true" /><input ref="searchInput" v-model="query" type="search" placeholder="Type to filter" :aria-label="`Search ${title}`" /></label>
         <button class="purchase-setup-icon" type="button" :aria-pressed="activeOnly" aria-label="Show active records only" @click="activeOnly = !activeOnly"><ListFilter :size="17" /></button>
-        <button class="purchase-setup-button purchase-setup-button--primary" type="button" @click="openEditor()"><Plus :size="16" /> New {{ pageId === 'vendors' ? 'vendor' : title.replace(/s$/, '').toLocaleLowerCase() }}</button>
+        <button v-if="can('Purchases', 'create')" class="purchase-setup-button purchase-setup-button--primary" type="button" :disabled="workspace.loading.value || references.loading.value || Boolean(references.error.value)" @click="openEditor()"><Plus :size="16" /> New {{ pageId === 'vendors' ? 'vendor' : title.replace(/s$/, '').toLocaleLowerCase() }}</button>
         <button class="purchase-setup-icon" type="button" :aria-pressed="compact" aria-label="Toggle compact rows" @click="compact = !compact"><LayoutGrid :size="18" /></button>
       </div>
     </header>
@@ -77,9 +95,9 @@ async function deleteRecord(record: PurchaseSetupRecord) {
           </tr>
         </tbody>
       </table>
-      <div v-if="!visibleRows.length" class="purchase-setup-empty" role="status"><strong>{{ rows.length ? 'No matching records' : 'No rows to show' }}</strong><p>{{ rows.length ? 'Try another search or clear the active filter.' : `Add a ${title.replace(/s$/, '').toLocaleLowerCase()} to get started.` }}</p><button v-if="!rows.length" class="purchase-setup-button" type="button" @click="openEditor()">Add record</button></div>
+      <div v-if="!workspace.loading.value && !workspace.error.value && !visibleRows.length" class="purchase-setup-empty" role="status"><strong>{{ rows.length ? 'No matching records' : 'No rows to show' }}</strong><p>{{ rows.length ? 'Try another search or clear the active filter.' : `Add a ${title.replace(/s$/, '').toLocaleLowerCase()} to get started.` }}</p><button v-if="!rows.length && can('Purchases', 'create')" class="purchase-setup-button" type="button" @click="openEditor()">Add record</button></div>
       <footer>{{ visibleRows.length }}</footer>
     </div>
-    <PurchaseSetupEditor :open="editorOpen" :kind="pageId" :record="editing" @close="editorOpen = false" @save="saveRecord" @delete="deleteRecord" />
+    <PurchaseSetupEditor :open="editorOpen" :kind="pageId" :record="editing" :busy="workspace.busy.value" :error="workspace.error.value" :readonly="!editable" :can-delete="can('Purchases', 'delete')" @close="editorOpen = false" @save="saveRecord" @delete="deleteRecord" />
   </section>
 </template>

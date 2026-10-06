@@ -1,6 +1,6 @@
 import { ref, type Ref } from 'vue'
 import type { EntityResponseDto } from '../contracts/dto'
-import { dataMode } from './api/config'
+import { usesApiResource } from './api/config'
 import { ApiError, errorMessage } from './api/errors'
 import { http } from './api/httpClient'
 import { cloneRecord } from './repository'
@@ -58,22 +58,24 @@ export function resetSettingsStores() {
 
 /** `resource` is relative to the company prefix, e.g. `/settings/tax`. `fallback` is shown until loaded. */
 export function createSettingsStore<T extends object>(resource: string, fallback: T, seed: T = fallback): SettingsStore<T> {
-  const repository = dataMode === 'api' ? createHttpSettings<T>(resource) : createMemorySettings(resource, seed)
+  const repository = usesApiResource(resource) ? createHttpSettings<T>(resource) : createMemorySettings(resource, seed)
   const value = ref(cloneRecord(fallback)) as Ref<T>
   const status = ref<CollectionStatus>('idle')
   const error = ref('')
   let version = 0
   let pending: Promise<void> | null = null
+  let generation = 0
 
   function load(force: boolean): Promise<void> {
     if (pending) return pending
     if (!force && status.value === 'ready') return Promise.resolve()
+    const current = generation
     status.value = 'loading'
     error.value = ''
     pending = repository.load()
-      .then((result) => { value.value = result.value; version = result.version; status.value = 'ready' })
-      .catch((cause: unknown) => { error.value = errorMessage(cause, 'Settings could not be loaded.'); status.value = 'error' })
-      .finally(() => { pending = null })
+      .then((result) => { if (current !== generation) return; value.value = result.value; version = result.version; status.value = 'ready' })
+      .catch((cause: unknown) => { if (current !== generation) return; error.value = errorMessage(cause, 'Settings could not be loaded.'); status.value = 'error' })
+      .finally(() => { if (current === generation) pending = null })
     return pending
   }
 
@@ -85,13 +87,17 @@ export function createSettingsStore<T extends object>(resource: string, fallback
     ensureLoaded: () => load(false),
     reload: () => load(true),
     async save(next) {
+      const current = generation
       await load(false)
+      if (current !== generation || status.value !== 'ready') throw new Error(error.value || 'Please reload these settings before saving.')
       const result = await repository.save(next, version)
+      if (current !== generation) throw new Error('Your session changed. Sign in again.')
       value.value = result.value
       version = result.version
       return result.value
     },
     reset() {
+      generation += 1
       pending = null
       value.value = cloneRecord(fallback)
       version = 0

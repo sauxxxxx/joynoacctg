@@ -13,7 +13,7 @@ export interface BankAccountRecord extends Entity {
   active: boolean
 }
 
-export type BankTransactionStatus = 'Draft' | 'Journalized'
+export type BankTransactionStatus = 'Draft' | 'Journalized' | 'Voided'
 /** Money in (deposit, collection) or money out (payment, withdrawal). Decides the journal type. */
 export type BankTransactionDirection = 'Receipt' | 'Disbursement'
 

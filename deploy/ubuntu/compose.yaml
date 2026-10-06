@@ -1,0 +1,92 @@
+name: joynoacctg
+
+x-api: &api-settings
+  image: joyno-accounting-api:local
+  init: true
+  networks: [backend]
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: '3'
+
+services:
+  postgres:
+    image: postgres:17-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: joyno
+      POSTGRES_USER: joyno_owner
+      POSTGRES_PASSWORD: ${JOYNO_OWNER_DB_PASSWORD:?Set a strong owner database password}
+      JOYNO_APP_DB_PASSWORD: ${JOYNO_APP_DB_PASSWORD:?Set a different runtime database password}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-runtime-role.sh:/docker-entrypoint-initdb.d/10-runtime-role.sh:ro
+    networks: [backend]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U joyno_owner -d joyno']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+
+  migrate:
+    <<: *api-settings
+    profiles: [tools]
+    command: [node, server/cli/migrate.js]
+    environment:
+      NODE_ENV: production
+      JOYNO_DB_DRIVER: postgres
+      JOYNO_DB_HOST: postgres
+      JOYNO_DB_NAME: joyno
+      JOYNO_DB_USER: joyno_owner
+      JOYNO_DB_PASSWORD: ${JOYNO_OWNER_DB_PASSWORD:?Set owner database password}
+      JOYNO_DB_RUNTIME_ROLE: joyno_app
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *api-settings
+    read_only: true
+    tmpfs: ['/tmp:rw,noexec,nosuid,size=16m']
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    pids_limit: 128
+    build:
+      context: ../..
+      dockerfile: deploy/ubuntu/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      JOYNO_DB_DRIVER: postgres
+      JOYNO_DB_HOST: postgres
+      JOYNO_DB_NAME: joyno
+      JOYNO_DB_USER: joyno_app
+      JOYNO_DB_PASSWORD: ${JOYNO_APP_DB_PASSWORD:?Set runtime database password}
+      JOYNO_API_HOST: 0.0.0.0
+      JOYNO_API_PORT: '3001'
+      JOYNO_TRUST_PROXY: '1'
+      JOYNO_CORS_ORIGINS: ${JOYNO_CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+    ports:
+      - '127.0.0.1:${JOYNO_HOST_API_PORT:-3001}:3001'
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3001/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 15s
+      start_period: 15s
+      retries: 3
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+
+networks:
+  backend:

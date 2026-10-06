@@ -9,6 +9,10 @@ export interface PurchaseDraft {
   remarks: string; paymentMethod: string; paymentTerms: string; checkNumber: string
   month: string; year: string; period: string; payrollFrequency: string; payGroup: string; accrualJE: string
   lines: PurchaseLineDraft[]
+  dueDate?: string
+  custodianId?: string
+  fundMovement?: '' | 'Replenishment' | 'Disbursement'
+  allocations?: { id: string; invoiceId: string; others: string; amount: string }[]
 }
 
 export function emptyPurchaseDraft(): PurchaseDraft {
@@ -33,6 +37,7 @@ export function validatePurchaseDraft(kind: PurchaseKind, draft: PurchaseDraft, 
   if (kind !== 'payrolls' && !draft.vendorId) return { error: 'Choose a vendor or payee.' }
   if (kind === 'purchase-receipts' && !draft.paymentMethod.trim()) return { error: 'Enter a payment method.' }
   if (kind === 'check-voucher' && !draft.checkNumber.trim()) return { error: 'Enter a check number.' }
+  if (kind === 'purchase-invoices' && draft.dueDate && (!parseIsoDate(draft.dueDate) || draft.dueDate < draft.date)) return { error: 'Choose a due date on or after the invoice date.' }
 
   let amountCents = 0
   const lines: PurchaseRecord['lines'] = []
@@ -56,14 +61,17 @@ export function validatePurchaseDraft(kind: PurchaseKind, draft: PurchaseDraft, 
   if (taxCents === null || taxCents < 0) return { error: 'Enter a valid tax amount.' }
   const totalCents = amountCents + taxCents
   if (!Number.isSafeInteger(totalCents)) return { error: 'The total amount is too large.' }
-  const paidCents = kind === 'purchase-invoices' ? parseMoneyToCents(draft.paid) : kind === 'purchase-receipts' ? totalCents : 0
+  const paidCents = 0
   if (paidCents === null || paidCents < 0 || paidCents > totalCents) return { error: 'Paid amount must be between zero and the total.' }
 
   return { record: {
-    id: existing?.id ?? crypto.randomUUID(), kind, number: base.data.number, date: base.data.date,
+    id: existing?.id ?? crypto.randomUUID(), version: existing?.version, kind, number: base.data.number, date: base.data.date,
     vendorId: draft.vendorId, amountCents, totalCents, paidCents, taxCents, status: 'Draft',
     remarks: draft.remarks.trim(), paymentMethod: draft.paymentMethod.trim(), paymentTerms: draft.paymentTerms.trim(),
     checkNumber: draft.checkNumber.trim(), lines, month: draft.month, year: draft.year, period: draft.period.trim(),
     payrollFrequency: draft.payrollFrequency.trim(), payGroup: draft.payGroup.trim(), accrualJE: draft.accrualJE.trim(),
+    allocations: (draft.allocations || []).map((row) => ({ id: row.id, invoiceId: row.invoiceId, others: row.others, amountCents: parseMoneyToCents(row.amount) ?? 0 })),
+    dueDate: kind === 'purchase-invoices' ? draft.dueDate || draft.date : '',
+    custodianId: draft.custodianId || '', fundMovement: draft.custodianId ? draft.fundMovement || '' : '',
   } }
 }

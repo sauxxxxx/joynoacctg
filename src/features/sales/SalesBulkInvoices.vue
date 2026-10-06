@@ -4,7 +4,9 @@ import { Download, Plus, Search, Trash2, Upload, X } from '@lucide/vue'
 import AppDatePicker from '../../components/ui/AppDatePicker.vue'
 import AppSelect from '../../components/ui/AppSelect.vue'
 import { decimalToCents } from '../../lib/money'
-import { salesDocumentRepository } from '../../services/previewRepositories'
+import { http } from '../../services/api/httpClient'
+import type { EntityResponseDto } from '../../contracts/dto'
+import { useSubmit } from '../../lib/useSubmit'
 import { goods, otherItems, services } from '../company/companyStore'
 import { customers } from './customers/customerPreviewStore'
 import { downloadInvoiceSheet, readInvoiceSheet } from './invoiceSpreadsheet'
@@ -12,6 +14,9 @@ import { salesDocuments, setupRecords, type SalesDocument, type SalesLineItem } 
 import './sales-pages.css'
 
 const emit = defineEmits<{ close: []; saved: [count: number] }>()
+const mutation = useSubmit()
+let submittedPayload = ''
+let batchKey = crypto.randomUUID()
 type BulkRow = { id: string; number: string; date: string; customerId: string; paymentTermId: string; item: string; quantity: number; unitPrice: number }
 const pad = (value: number) => String(value).padStart(2, '0')
 const today = () => { const date = new Date(); return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` }
@@ -36,10 +41,11 @@ const visibleRows = computed(() => rows.value.filter((row) => `${row.number} ${r
 function addRow() { rows.value.push(emptyRow()); error.value = '' }
 function removeRow(id: string) { rows.value = rows.value.filter((row) => row.id !== id) }
 function validateRows() {
-  if (rows.value.length > 500) return 'Save at most 500 invoices at a time.'
+  if (rows.value.length > 100) return 'Save at most 100 invoices at a time.'
   const existing = new Set(salesDocuments.value.filter((item) => item.kind === 'sales-invoices').map((item) => item.number.toLocaleLowerCase()))
   const seen = new Set<string>()
   for (const [index, row] of rows.value.entries()) {
+    if (!terms.value.some((term) => term.id === row.paymentTermId)) return `Row ${index + 1}: choose a payment term.`
     if (!row.number.trim() || !validDate(row.date) || !customers.value.some((customer) => customer.id === row.customerId) || !row.item.trim() || !Number.isFinite(row.quantity) || row.quantity <= 0 || !Number.isFinite(row.unitPrice) || row.unitPrice < 0) return `Row ${index + 1} needs an invoice number, valid date, customer, item, positive quantity, and nonnegative price.`
     const number = row.number.trim().toLocaleLowerCase()
     if (seen.has(number) || existing.has(number)) return `Invoice number ${row.number} is duplicated.`
@@ -48,13 +54,14 @@ function validateRows() {
   return ''
 }
 async function saveAll() {
+  if (busy.value || mutation.pending.value) return
   if (!rows.value.length) { error.value = 'Add at least one invoice.'; return }
   error.value = validateRows()
   if (error.value) return
   const documents: SalesDocument[] = rows.value.map((row) => {
     const customer = customers.value.find((item) => item.id === row.customerId)
     const itemId = catalog.value.find((item) => item.name.toLocaleLowerCase() === row.item.trim().toLocaleLowerCase())?.id ?? ''
-    const line: SalesLineItem = { id: crypto.randomUUID(), itemId, description: row.item.trim(), quantity: Number(row.quantity), unitPriceCents: decimalToCents(row.unitPrice) ?? 0, withholdingTaxCode: '', withholdingTaxCents: 0, vatCode: '', vatType: '', vatCents: 0, creditableVatCents: 0 }
+    const line: SalesLineItem = { id: row.id, itemId, description: row.item.trim(), quantity: Number(row.quantity), unitPriceCents: decimalToCents(row.unitPrice) ?? 0, withholdingTaxCode: '', withholdingTaxCents: 0, vatCode: '', vatType: '', vatCents: 0, creditableVatCents: 0 }
     return {
       id: crypto.randomUUID(), kind: 'sales-invoices', number: row.number.trim(), date: row.date, customerId: row.customerId,
       status: 'Draft', paymentTermId: row.paymentTermId, paymentMethodId: '', dueDate: '',
@@ -63,7 +70,15 @@ async function saveAll() {
       discountTypeId: '', discountRate: 0, discountAmountCents: 0, lines: [line], payments: [], withInvoice: false,
     }
   })
-  await Promise.all(documents.map((document) => salesDocumentRepository.save(document)))
+  const input = documents.map(({ id: _id, version: _version, ...record }) => record)
+  const serialized = JSON.stringify(input)
+  if (submittedPayload && submittedPayload !== serialized) batchKey = crypto.randomUUID()
+  submittedPayload = serialized
+  if (!await mutation.run(async () => {
+    const result = await http.post<EntityResponseDto<SalesDocument[]>>('/sales-documents/bulk', { batchKey, documents: input })
+    const ids = new Set(result.data.map((record) => record.id))
+    salesDocuments.value = [...salesDocuments.value.filter((record) => !ids.has(record.id)), ...result.data]
+  })) return
   emit('saved', documents.length)
 }
 
@@ -108,6 +123,7 @@ async function importExcel(event: Event) {
 <template>
   <section class="sales-page" aria-label="Add multiple invoices">
     <div class="sales-panel">
+      <fieldset :disabled="busy || mutation.pending.value" style="border: 0; margin: 0; padding: 0; min-width: 0">
       <div class="sales-panel__toolbar">
         <div><h2>New invoices</h2><p>Add rows here, or fill in the Excel template and upload it.</p></div>
         <div class="sales-panel__actions sales-panel__actions--bulk">
@@ -119,7 +135,7 @@ async function importExcel(event: Event) {
           <input ref="fileInput" class="sales-visually-hidden" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" @change="importExcel" />
         </div>
       </div>
-      <p v-if="error" class="sales-form__error" role="alert">{{ error }}</p>
+      <p v-if="error || mutation.error.value" class="sales-form__error" role="alert">{{ error || mutation.error.value }}</p>
       <div class="sales-table-wrap">
         <table class="sales-table sales-bulk-table"><thead><tr><th>Invoice #</th><th>Date</th><th>Customer</th><th>Payment Term</th><th>Item</th><th>Quantity</th><th>Unit Price</th><th>Actions</th></tr></thead>
           <tbody><tr v-for="row in visibleRows" :key="row.id">
@@ -135,7 +151,8 @@ async function importExcel(event: Event) {
         </table>
       </div>
       <div v-if="!rows.length" class="sales-empty"><strong>No rows to show</strong><span>Add a row or upload the downloaded Excel template.</span></div>
-      <div class="sales-panel__footer"><span>{{ rows.length }} staged invoice{{ rows.length === 1 ? '' : 's' }}</span><button class="sales-button sales-button--primary" type="button" :disabled="busy || !rows.length" @click="saveAll">Save all drafts</button></div>
+      <div class="sales-panel__footer"><span>{{ rows.length }} staged invoice{{ rows.length === 1 ? '' : 's' }}</span><button class="sales-button sales-button--primary" type="button" :disabled="busy || mutation.pending.value || !rows.length" @click="saveAll">{{ mutation.pending.value ? 'Saving…' : 'Save all drafts' }}</button></div>
+      </fieldset>
     </div>
   </section>
 </template>

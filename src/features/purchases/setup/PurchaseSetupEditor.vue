@@ -5,11 +5,11 @@ import AppSelect from '../../../components/ui/AppSelect.vue'
 import { accounts } from '../../accounting/setup/accountSetupData'
 import { emptyPurchaseSetupRecord, type PurchaseSetupKind, type PurchaseSetupRecord } from './purchaseSetupData'
 
-const props = defineProps<{ open: boolean; kind: PurchaseSetupKind; record: PurchaseSetupRecord | null }>()
+const props = defineProps<{ open: boolean; kind: PurchaseSetupKind; record: PurchaseSetupRecord | null; busy?: boolean; error?: string; readonly?: boolean; canDelete?: boolean }>()
 const emit = defineEmits<{ close: []; save: [record: PurchaseSetupRecord]; delete: [record: PurchaseSetupRecord] }>()
 const dialog = ref<HTMLDialogElement | null>(null)
 const draft = ref(emptyPurchaseSetupRecord(props.kind))
-const error = ref('')
+const localError = ref('')
 const isTerms = () => props.kind === 'purchases-payment-terms'
 const isDiscount = () => props.kind === 'purchases-discount-types'
 const singular = () => ({
@@ -26,29 +26,29 @@ const computationOptions = ['Amount', 'Percentage'].map((value) => ({ value, lab
 
 watch(() => [props.open, props.record, props.kind] as const, async ([open]) => {
   draft.value = props.record ? { ...props.record } : emptyPurchaseSetupRecord(props.kind)
-  error.value = ''
+  localError.value = ''
   await nextTick()
   if (open && !dialog.value?.open) dialog.value?.showModal()
   if (!open && dialog.value?.open) dialog.value.close()
 }, { immediate: true })
 
 function save() {
+  if (props.busy || props.readonly) return
   const name = draft.value.name.trim()
-  if (!name) { error.value = 'Name is required.'; return }
+  if (!name) { localError.value = 'Name is required.'; return }
   if (isDiscount() && draft.value.computation === 'Percentage' && draft.value.rate > 100) {
-    error.value = 'Percentage rate cannot exceed 100.'
+    localError.value = 'Percentage rate cannot exceed 100.'
     return
   }
   emit('save', { ...draft.value, id: draft.value.id || crypto.randomUUID(), name })
-  emit('close')
 }
 </script>
 
 <template>
-  <dialog ref="dialog" class="purchase-setup-editor" :aria-label="`${draft.id ? 'Edit' : 'New'} ${singular()}`" @close="emit('close')">
+  <dialog ref="dialog" class="purchase-setup-editor" :aria-label="`${draft.id ? 'Edit' : 'New'} ${singular()}`" @close="emit('close')" @cancel="busy && $event.preventDefault()">
     <form @submit.prevent="save">
-      <header><div><h2>{{ draft.id ? 'Edit' : 'New' }} {{ singular() }}</h2><p>Changes are kept in this preview only.</p></div><button type="button" aria-label="Close form" @click="dialog?.close()"><X :size="18" /></button></header>
-      <div class="purchase-setup-editor__fields">
+      <header><div><h2>{{ draft.id ? 'Edit' : 'New' }} {{ singular() }}</h2><p>Maintain the details used in purchase records.</p></div><button type="button" aria-label="Close form" :disabled="busy" @click="dialog?.close()"><X :size="18" /></button></header>
+      <fieldset class="purchase-setup-editor__fields" :disabled="busy || readonly" style="border: 0; margin: 0">
         <label>Name <span>*</span><input v-model="draft.name" required maxlength="140" /></label>
         <template v-if="kind === 'vendors'">
           <label>TIN<input v-model="draft.tin" maxlength="40" /></label>
@@ -67,9 +67,9 @@ function save() {
         </template>
         <AppSelect v-if="kind !== 'vendors'" v-model="draft.accountId" label="Account" :options="accountOptions" placeholder="Choose account" />
         <label v-if="kind === 'revolving-fund-customers' || isTerms()" class="purchase-setup-editor__check"><input v-model="draft.active" type="checkbox" /> Active</label>
-        <p v-if="error" class="purchase-setup-editor__error" role="alert">{{ error }}</p>
-      </div>
-      <footer><button v-if="draft.id" class="purchase-setup-button purchase-setup-button--danger" type="button" @click="emit('delete', draft)"><Trash2 :size="15" /> Delete</button><span /><button class="purchase-setup-button" type="button" @click="dialog?.close()">Cancel</button><button class="purchase-setup-button purchase-setup-button--primary" type="submit">Save</button></footer>
+      </fieldset>
+      <p v-if="localError || error" class="purchase-setup-editor__error" role="alert">{{ localError || error }}</p>
+      <footer><button v-if="draft.id && canDelete" class="purchase-setup-button purchase-setup-button--danger" type="button" :disabled="busy" @click="emit('delete', draft)"><Trash2 :size="15" /> Delete</button><span /><button class="purchase-setup-button" type="button" :disabled="busy" @click="dialog?.close()">{{ readonly ? 'Close' : 'Cancel' }}</button><button v-if="!readonly" class="purchase-setup-button purchase-setup-button--primary" type="submit" :disabled="busy">{{ busy ? 'Saving…' : 'Save' }}</button></footer>
     </form>
   </dialog>
 </template>

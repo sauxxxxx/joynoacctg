@@ -1,0 +1,3 @@
+services:
+  api:
+    image: joyno-accounting-api:private-rollback-passwords-20261006

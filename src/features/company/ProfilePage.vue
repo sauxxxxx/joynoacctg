@@ -6,7 +6,7 @@ import SettingsPage from './SettingsPage.vue'
 
 const config = settingsPages['company-profile']
 const logoError = ref('')
-const maxBytes = 2 * 1024 * 1024
+const maxBytes = 500 * 1024
 
 // The logo is kept as a data URL in the profile so reports can print it.
 function chooseLogo(event: Event, draft: Record<string, unknown>) {
@@ -14,8 +14,8 @@ function chooseLogo(event: Event, draft: Record<string, unknown>) {
   const file = input.files?.[0]
   input.value = ''
   if (!file) return
-  if (!file.type.startsWith('image/')) { logoError.value = 'Choose an image file (PNG, JPG, or SVG).'; return }
-  if (file.size > maxBytes) { logoError.value = 'The logo can be up to 2 MB.'; return }
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) { logoError.value = 'Choose a PNG, JPG, or WebP image.'; return }
+  if (file.size > maxBytes) { logoError.value = 'The logo can be up to 500 KB.'; return }
   logoError.value = ''
   const reader = new FileReader()
   reader.onload = () => { draft.logo = String(reader.result) }

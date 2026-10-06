@@ -1,6 +1,7 @@
 import { apiConfig } from './config'
 import { ApiError, apiErrorFromResponse } from './errors'
 import { getApiCredentials, notifySessionExpired } from './session'
+import { notifyDataChanged } from './dataEvents'
 
 export type QueryValue = string | number | boolean | null | undefined
 export type QueryParams = Record<string, QueryValue | QueryValue[]>
@@ -8,6 +9,9 @@ export type QueryParams = Record<string, QueryValue | QueryValue[]>
 export interface RequestOptions {
   query?: QueryParams
   body?: unknown
+  binaryBody?: Blob
+  metadata?: string
+  responseType?: 'json' | 'blob'
   signal?: AbortSignal
   /** Prefix the path with `/companies/{companyId}`. Defaults to true; auth endpoints opt out. */
   tenant?: boolean
@@ -46,19 +50,31 @@ export async function request<T>(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DEL
   const token = options.accessToken ?? getApiCredentials()?.accessToken
   if (token) headers.Authorization = `Bearer ${token}`
   if (options.body !== undefined) headers['Content-Type'] = 'application/json'
+  if (options.binaryBody) headers['Content-Type'] = 'application/octet-stream'
+  if (options.metadata) headers['X-Document-Metadata'] = options.metadata
 
   const timeout = new AbortController()
   const timer = window.setTimeout(() => timeout.abort(), apiConfig.timeoutMs)
   const abort = () => timeout.abort()
   options.signal?.addEventListener('abort', abort, { once: true })
+  if (options.signal?.aborted) timeout.abort()
 
   let response: Response
   try {
     response = await fetch(url, {
       method, headers, signal: timeout.signal,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      body: options.binaryBody ?? (options.body === undefined ? undefined : JSON.stringify(options.body)),
     })
+    const body = response.ok && options.responseType === 'blob' ? await response.blob() : await readBody(response)
+    if (!response.ok) {
+      const error = apiErrorFromResponse(response.status, body, requestId)
+      if (token && token === getApiCredentials()?.accessToken && (error.code === 'SESSION_EXPIRED' || error.code === 'UNAUTHENTICATED')) notifySessionExpired(error.message)
+      throw error
+    }
+    if (method !== 'GET' && (options.tenant ?? true)) notifyDataChanged(path)
+    return body as T
   } catch (cause) {
+    if (cause instanceof ApiError) throw cause
     if (options.signal?.aborted) throw cause
     throw new ApiError('NETWORK_ERROR', undefined, { requestId })
   } finally {
@@ -66,13 +82,6 @@ export async function request<T>(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DEL
     options.signal?.removeEventListener('abort', abort)
   }
 
-  const body = await readBody(response)
-  if (!response.ok) {
-    const error = apiErrorFromResponse(response.status, body, requestId)
-    if (error.code === 'SESSION_EXPIRED' || error.code === 'UNAUTHENTICATED') notifySessionExpired(error.message)
-    throw error
-  }
-  return body as T
 }
 
 export const http = {

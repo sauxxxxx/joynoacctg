@@ -1,12 +1,13 @@
 import type { SalesDocument } from '../../sales/salesPreviewStore'
+import { lineAmountCents } from '../../sales/salesRules'
 
 /**
  * Summary of Sales from Sales › Invoices.
  *
- * Rules applied (flagged, pending confirmation):
+ * Recorded-value report rules:
  * - Included statuses: Unpaid and Paid. Draft is optional; Cancelled is never included.
  * - Gross sales = Σ quantity × unit price. Net sales = invoice total before tax (gross less discount),
- *   exactly as the invoice form stores it.
+ *   calculated from recorded line amounts and the saved discount.
  * - VAT and withholding are the amounts typed on each invoice line. They are listed as recorded and are
  *   not added to or deducted from net sales, because the invoice form does not define that treatment.
  */
@@ -38,8 +39,8 @@ export function summarizeSales(
   for (const invoice of invoices) {
     const key = grouping === 'month' ? invoice.date.slice(0, 7) : invoice.customerId
     const row = groups.get(key) ?? { key, label: labelFor(invoice), invoiceCount: 0, grossCents: 0, discountCents: 0, netCents: 0, vatCents: 0, withholdingCents: 0 }
-    const gross = invoice.lines.reduce((sum, line) => sum + Math.round(line.quantity * line.unitPriceCents), 0)
-    const net = invoice.amountCents
+    const gross = invoice.lines.reduce((sum, line) => sum + lineAmountCents(line), 0)
+    const net = Math.max(0, gross - (invoice.discountAmountCents || 0))
     row.invoiceCount += 1
     row.grossCents += gross
     row.netCents += net

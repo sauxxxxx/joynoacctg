@@ -10,6 +10,10 @@ import SubNavLayout from './SubNavLayout.vue'
 import { useSettingsDraft } from './useSettingsDraft'
 import '../workspace/workspace.css'
 import './company.css'
+import { saveAccountMappings } from './companyPersistence'
+import { errorMessage } from '../../services/api/errors'
+import { accountStore } from '../accounting/setup/accountSetupData'
+void accountStore.ensureLoaded()
 
 type Section = 'general' | 'mapping'
 const sections: { id: Section; label: string; icon: typeof Info }[] = [
@@ -32,7 +36,7 @@ function validate(draft: RecordingSettings): string {
   if (Boolean(draft.closeMonth) !== Boolean(draft.closeYear)) return 'Choose both the month and the year to close the books.'
   return ''
 }
-const { draft, error, notice, dirty, save, discard } = useSettingsDraft(recordingSettings, 'Recording settings', validate)
+const { draft, error, notice, dirty, saving, save, discard } = useSettingsDraft(recordingSettings, 'Recording settings', validate)
 const closedThrough = computed(() => draft.value.closeMonth && draft.value.closeYear
   ? new Intl.DateTimeFormat('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }).format(new Date(Number(draft.value.closeYear), Number(draft.value.closeMonth), 0))
   : '')
@@ -43,6 +47,7 @@ const mappingDialog = ref<HTMLDialogElement | null>(null)
 const editing = ref<AccountMapping | null>(null)
 const accountDraft = ref('')
 const mappingError = ref('')
+const mappingSaving = ref(false)
 const mappingNotice = ref('')
 const accountOptions = computed(() => accounts.value.filter((account) => account.active)
   .map((account) => ({ value: account.code, label: `${account.code} · ${account.name}` })))
@@ -52,6 +57,7 @@ const visibleMappings = computed(() => {
 })
 
 function editMapping(row: AccountMapping) {
+  if (mappingSaving.value) return
   editing.value = row
   accountDraft.value = row.accountId
   mappingError.value = ''
@@ -59,14 +65,16 @@ function editMapping(row: AccountMapping) {
   nextTick(() => document.getElementById('recording-map-account')?.focus())
 }
 
-function saveMapping() {
+async function saveMapping() {
   const row = editing.value
   const accountId = accountDraft.value
-  if (!row) return
-  if (!accountId) { mappingError.value = 'Choose the account to use.'; return }
-  accountMappings.value = accountMappings.value.map((item) => item.id === row.id ? { ...item, accountId } : item)
+  if (!row || mappingSaving.value) return
+  mappingSaving.value = true
+  try { await saveAccountMappings(accountMappings.value.map((item) => item.id === row.id ? { ...item, accountId } : item)) }
+  catch (cause) { mappingError.value = errorMessage(cause, 'The account mapping could not be saved.'); return }
+  finally { mappingSaving.value = false }
   recordAudit('Company', 'Updated', `Account mapping: ${row.label}`, `${accountName(row.accountId)} → ${accountName(accountId)}`)
-  mappingNotice.value = `${row.label} now uses ${accountName(accountId)}.`
+  mappingNotice.value = accountId ? `${row.label} now uses ${accountName(accountId)}.` : `${row.label} mapping cleared.`
   mappingDialog.value?.close()
 }
 </script>
@@ -100,7 +108,7 @@ function saveMapping() {
               </tbody>
             </table>
           </div>
-          <SaveBar :dirty="dirty" :error="error" @save="save" @discard="discard" />
+          <SaveBar :dirty="dirty" :error="error" :busy="saving" @save="save" @discard="discard" />
         </div>
 
         <div v-else class="ws-stack">
@@ -130,15 +138,16 @@ function saveMapping() {
       </SubNavLayout>
     </div>
 
-    <dialog ref="mappingDialog" class="ws-dialog" aria-labelledby="mapping-dialog-title" @close="editing = null">
+    <dialog ref="mappingDialog" class="ws-dialog" aria-labelledby="mapping-dialog-title" @cancel="mappingSaving && $event.preventDefault()" @close="editing = null">
       <form novalidate @submit.prevent="saveMapping">
-        <div class="ws-dialog__header"><h2 id="mapping-dialog-title">{{ editing?.label }}</h2><button class="ws-icon-button" type="button" aria-label="Close" @click="mappingDialog?.close()"><X :size="18" aria-hidden="true" /></button></div>
+        <div class="ws-dialog__header"><h2 id="mapping-dialog-title">{{ editing?.label }}</h2><button class="ws-icon-button" type="button" :disabled="mappingSaving" aria-label="Close" @click="mappingDialog?.close()"><X :size="18" aria-hidden="true" /></button></div>
         <div class="ws-dialog__body">
           <p>{{ editing?.description }}</p>
-          <AppSelect id="recording-map-account" v-model="accountDraft" label="Account" required placeholder="Choose account" :options="accountOptions" />
+          <AppSelect id="recording-map-account" v-model="accountDraft" label="Account" :disabled="mappingSaving" placeholder="Not configured" :options="accountOptions" />
+          <button v-if="accountDraft" class="ws-button" type="button" :disabled="mappingSaving" @click="accountDraft = ''">Clear mapping</button>
           <p v-if="mappingError" class="ws-form-error" role="alert">{{ mappingError }}</p>
         </div>
-        <div class="ws-dialog__footer"><button class="ws-button" type="button" @click="mappingDialog?.close()">Cancel</button><button class="ws-button ws-button--primary" type="submit">Save</button></div>
+        <div class="ws-dialog__footer"><button class="ws-button" type="button" :disabled="mappingSaving" @click="mappingDialog?.close()">Cancel</button><button class="ws-button ws-button--primary" type="submit" :disabled="mappingSaving">{{ mappingSaving ? 'Saving…' : 'Save' }}</button></div>
       </form>
     </dialog>
   </section>

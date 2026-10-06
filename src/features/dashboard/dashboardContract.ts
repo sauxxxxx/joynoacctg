@@ -28,9 +28,9 @@ export interface DashboardActivity {
 export interface DashboardSnapshot {
   companyName: string
   sourceLabel: string
-  bankBalanceCents: number
-  receivablesCents: number
-  payablesCents: number
+  bankBalanceCents: number | null
+  receivablesCents: number | null
+  payablesCents: number | null
   revenueCents: number
   expensesCents: number
   unjournalizedCount: number

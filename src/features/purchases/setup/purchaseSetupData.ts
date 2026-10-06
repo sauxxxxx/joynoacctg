@@ -4,6 +4,7 @@ export type PurchaseSetupKind = 'vendors' | 'revolving-fund-customers' | 'purcha
 
 export interface PurchaseSetupRecord {
   id: string
+  version?: number
   kind: PurchaseSetupKind
   name: string
   tin: string

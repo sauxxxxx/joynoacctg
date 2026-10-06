@@ -1,6 +1,6 @@
 import type { ListResponseDto, EntityResponseDto } from '../contracts/dto'
 import { compareValues, paginate, type PageResult, type SortDirection } from '../lib/tableQuery'
-import { dataMode } from './api/config'
+import { usesApiResource } from './api/config'
 import { ApiError } from './api/errors'
 import { http, type QueryParams } from './api/httpClient'
 
@@ -225,16 +225,16 @@ export function createHttpRepository<T extends Entity, F extends Filters = Filte
 }
 
 /**
- * Picks the API adapter when `VITE_API_BASE_URL` is set, otherwise the in-memory preview adapter.
+ * Only supported resources use the API in connected mode; other resources remain preview-only.
  * Modules whose preview operations need server internals use `createMemoryBackend` and `selectRepository`.
  */
 export function createRepository<T extends Entity, F extends Filters = Filters>(resource: string, seed: T[], options: RepositoryOptions<T, F> = {}): EntityRepository<T, F> {
-  return dataMode === 'api' ? createHttpRepository<T, F>(resource) : createMemoryRepository<T, F>(resource, seed, options)
+  return usesApiResource(resource) ? createHttpRepository<T, F>(resource) : createMemoryRepository<T, F>(resource, seed, options)
 }
 
 /** The API adapter in API mode, otherwise the given preview backend's repository. */
 export function selectRepository<T extends Entity, F extends Filters>(resource: string, backend: MemoryBackend<T, F>): EntityRepository<T, F> {
-  return dataMode === 'api' ? createHttpRepository<T, F>(resource) : backend.repository
+  return usesApiResource(resource) ? createHttpRepository<T, F>(resource) : backend.repository
 }
 
 export function stateError(message: string): ApiError {

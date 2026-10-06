@@ -1,5 +1,6 @@
 import { createCollectionStore } from '../../../services/collectionStore'
-import { conflictError, createRepository, validationError } from '../../../services/repository'
+import { conflictError, createHttpRepository, createRepository, validationError } from '../../../services/repository'
+import { usesApiResource } from '../../../services/api/config'
 
 export type AccountType = 'Asset' | 'Liability' | 'Equity' | 'Revenue' | 'Expense'
 
@@ -108,7 +109,10 @@ export const accountCategoryRepository = createRepository<AccountCategory>('/acc
   },
 })
 
-export const accountStore = createCollectionStore(accountRepository)
+const referenceAccounts = createHttpRepository<Account>('/reference-data/accounts')
+export const accountStore = createCollectionStore(usesApiResource('/accounts')
+  ? { ...accountRepository, list: referenceAccounts.list, listAll: referenceAccounts.listAll }
+  : accountRepository)
 export const categoryStore = createCollectionStore(accountCategoryRepository)
 
 /** Cached chart of accounts, sorted by code. Load with `accountStore.ensureLoaded()` or `useCollections`. */
@@ -124,7 +128,7 @@ export function categoryName(code: string): string {
 }
 
 export function findAccount(id: string): Account | undefined {
-  return accounts.value.find((item) => item.id === id)
+  return accounts.value.find((item) => item.id === id || item.code === id)
 }
 
 export function accountName(id: string): string {
