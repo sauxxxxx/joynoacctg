@@ -23,6 +23,8 @@ const workspace = useRecordWorkspace(purchaseRepository, purchaseRecords)
 const references = useDocumentReferences('purchases')
 const { authUser } = useAuth()
 const { can } = usePermissions(authUser)
+const loading = computed(() => workspace.loading.value || references.loading.value)
+const loadError = computed(() => workspace.error.value || references.error.value)
 const config = computed(() => purchaseConfigs[props.kind])
 const activeTab = ref('Search')
 const search = ref('')
@@ -67,6 +69,7 @@ const visibleRecords = computed(() => {
     .sort((a, b) => a.date.localeCompare(b.date))
 })
 const pagedRecords = computed(() => paginate(visibleRecords.value, currentPage.value, pageSize).items)
+const emptyFiltered = computed(() => filtered.value || purchaseRecords.value.some((record) => record.kind === props.kind))
 watch(visibleRecords, () => { currentPage.value = 1 })
 
 function applyFilters() {
@@ -152,15 +155,15 @@ function postedRecord(message: string) { editorOpen.value = false; notice.value 
             </form>
           </aside>
         </div>
-        <button v-if="can('Purchases', 'create')" type="button" class="purchases-button purchases-button--primary" :disabled="workspace.loading.value || references.loading.value || Boolean(references.error.value)" @click="openEditor()"><Plus :size="16" aria-hidden="true" />{{ newRecordLabel }}</button>
+        <button v-if="can('Purchases', 'create') && (visibleRecords.length || emptyFiltered || loading || loadError)" type="button" class="purchases-button purchases-button--primary" :disabled="loading || Boolean(loadError)" @click="openEditor()"><Plus :size="16" aria-hidden="true" />{{ newRecordLabel }}</button>
         <button type="button" class="purchases-button" :disabled="workspace.loading.value || references.loading.value || Boolean(workspace.error.value || references.error.value) || !visibleRecords.length" @click="exportPurchases(kind, visibleRecords)"><Download :size="16" aria-hidden="true" />Export CSV</button>
         <button type="button" class="purchases-icon-button" :aria-pressed="compact" aria-label="Toggle compact rows" @click="compact = !compact"><LayoutGrid :size="18" /></button>
       </div>
     </header>
     <p v-if="notice" class="purchases-notice" role="status">{{ notice }}</p>
-    <div class="purchases-workspace" :class="{ 'purchases-workspace--compact': compact }">
-      <PurchasesTable :kind="kind" :records="pagedRecords" :filtered="filtered" :can-create="can('Purchases', 'create')" @open="openEditor" @reset="resetFilters" @add="openEditor()" />
-      <AppPagination v-model:page="currentPage" :page-size="pageSize" :total="visibleRecords.length" :label="config.title.toLocaleLowerCase()" />
+    <div v-if="!loading && !loadError" class="purchases-workspace" :class="{ 'purchases-workspace--compact': compact, 'purchases-workspace--empty': !visibleRecords.length }">
+      <PurchasesTable :kind="kind" :records="pagedRecords" :filtered="emptyFiltered" :can-create="can('Purchases', 'create')" :create-label="newRecordLabel" @open="openEditor" @reset="resetFilters" @add="openEditor()" />
+      <AppPagination v-if="visibleRecords.length" v-model:page="currentPage" :page-size="pageSize" :total="visibleRecords.length" :label="config.title.toLocaleLowerCase()" />
     </div>
     <PurchasesEditor :open="editorOpen" :kind="kind" :record="selectedRecord" :busy="workspace.busy.value" :server-error="workspace.error.value" :readonly="!can('Purchases', selectedRecord ? 'edit' : 'create')" :can-delete="can('Purchases', 'delete')" @close="editorOpen = false" @save="saveRecord" @delete="deleteRecord" @changed="postedRecord" />
   </section>
