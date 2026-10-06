@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { FileText, Search } from '@lucide/vue'
 import { formatMoney } from '../../lib/money'
 import { purchaseConfigs, purchaseVendorName, type PurchaseKind, type PurchaseRecord } from './purchasePreviewData'
 
-const props = defineProps<{ kind: PurchaseKind; records: PurchaseRecord[]; filtered: boolean; canCreate: boolean }>()
+const props = defineProps<{ kind: PurchaseKind; records: PurchaseRecord[]; filtered: boolean; canCreate: boolean; createLabel: string }>()
 const emit = defineEmits<{ open: [record: PurchaseRecord]; reset: []; add: [] }>()
 const invoice = computed(() => props.kind === 'purchase-invoices')
 const payroll = computed(() => props.kind === 'payrolls')
@@ -19,7 +20,7 @@ function formatDate(value: string): string {
 
 <template>
   <div class="purchases-results" :class="{ 'purchases-results--invoice': invoice, 'purchases-results--payroll': payroll, 'purchases-results--receipt': receipt }">
-    <div class="purchases-results__scroll">
+    <div v-if="records.length" class="purchases-results__scroll">
       <table class="purchases-table"><thead><tr>
         <th scope="col">{{ purchaseConfigs[kind].numberLabel }}</th>
         <template v-if="payroll"><th scope="col">Month</th><th scope="col">Year</th><th scope="col">Period</th><th scope="col">Payroll Frequency</th><th scope="col">Pay Group</th><th scope="col">Accrual JE</th><th scope="col">Status</th><th scope="col" class="purchases-table__money">Amount</th></template>
@@ -33,8 +34,14 @@ function formatDate(value: string): string {
         <template v-else-if="invoice"><td>{{ formatDate(record.date) }}</td><td :title="purchaseVendorName(record.vendorId)">{{ purchaseVendorName(record.vendorId) }}</td><td class="purchases-table__money">{{ formatMoney(record.amountCents) }}</td><td class="purchases-table__money">{{ formatMoney(record.totalCents) }}</td><td><div class="purchases-table__paid"><span>{{ formatMoney(record.paidCents) }}</span><span>{{ record.totalCents ? (record.paidCents / record.totalCents * 100).toFixed(2) : '0.00' }}%</span></div><div class="purchases-table__progress"><span :style="{ width: `${record.totalCents ? record.paidCents / record.totalCents * 100 : 0}%` }" /></div></td><td><span :class="record.status === 'Posted' ? 'purchases-table__posted' : 'purchases-table__draft'">{{ record.status }}</span></td><td><input type="checkbox" :checked="record.paidCents >= record.totalCents" disabled :aria-label="`${record.number} fully paid ${record.paidCents >= record.totalCents ? 'yes' : 'no'}`" /></td><td :title="record.remarks">{{ record.remarks }}</td></template>
         <template v-else><td :title="purchaseVendorName(record.vendorId)">{{ purchaseVendorName(record.vendorId) }}</td><td>{{ formatDate(record.date) }}</td><td class="purchases-table__money">{{ formatMoney(record.amountCents) }}</td><td class="purchases-table__money">{{ formatMoney(record.totalCents) }}</td><td><span :class="record.status === 'Posted' ? 'purchases-table__posted' : 'purchases-table__draft'">{{ record.status }}</span></td><td :title="record.remarks">{{ record.remarks }}</td></template>
       </tr></tbody></table>
-      <div v-if="!records.length" class="purchases-empty" role="status"><strong>{{ filtered ? 'No matching records' : 'No records yet' }}</strong><p>{{ filtered ? 'Try another search, tab, or date range.' : 'Create a record to get started.' }}</p><button v-if="filtered" class="purchases-button" type="button" @click="emit('reset')">Reset filters</button><button v-else-if="canCreate" class="purchases-button" type="button" @click="emit('add')">Add draft</button></div>
     </div>
-    <footer class="purchases-results__footer"><span><span class="purchases-sr-only">Entries: </span>{{ records.length }}</span><span v-if="!payroll"><span class="purchases-sr-only">Amount: </span>{{ formatMoney(amount) }}</span><span v-if="invoice || !receipt"><span class="purchases-sr-only">Total amount: </span>{{ formatMoney(total) }}</span></footer>
+    <div v-else class="purchases-empty" role="status">
+      <span class="purchases-empty__icon"><component :is="filtered ? Search : FileText" :size="22" aria-hidden="true" /></span>
+      <strong>{{ filtered ? `No matching ${purchaseConfigs[kind].title.toLocaleLowerCase()}` : `No ${purchaseConfigs[kind].title.toLocaleLowerCase()} yet` }}</strong>
+      <p>{{ filtered ? 'Try another search, tab, or date range.' : `Your saved ${purchaseConfigs[kind].title.toLocaleLowerCase()} will appear here.` }}</p>
+      <button v-if="filtered" class="purchases-button" type="button" @click="emit('reset')">Reset filters</button>
+      <button v-else-if="canCreate" class="purchases-button purchases-button--primary" type="button" @click="emit('add')">{{ createLabel }}</button>
+    </div>
+    <footer v-if="records.length" class="purchases-results__footer"><span><span class="purchases-sr-only">Entries: </span>{{ records.length }}</span><span v-if="!payroll"><span class="purchases-sr-only">Amount: </span>{{ formatMoney(amount) }}</span><span v-if="invoice || !receipt"><span class="purchases-sr-only">Total amount: </span>{{ formatMoney(total) }}</span></footer>
   </div>
 </template>
