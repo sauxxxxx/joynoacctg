@@ -1,5 +1,5 @@
 import type { CreateJournalsResponseDto, EntityResponseDto } from '../../../contracts/dto'
-import { dataMode } from '../../../services/api/config'
+import { usesApiResource } from '../../../services/api/config'
 import { ApiError } from '../../../services/api/errors'
 import { http } from '../../../services/api/httpClient'
 import { stateError, validationError } from '../../../services/repository'
@@ -156,7 +156,7 @@ const previewOperations: JournalOperations = {
   },
 }
 
-export const journalOperations: JournalOperations = dataMode === 'api' ? httpOperations : previewOperations
+export const journalOperations: JournalOperations = usesApiResource('/journal-entries') ? httpOperations : previewOperations
 
 export function describeJournalResult(result: CreateJournalsResult, noun = 'journal entry'): string {
   const plural = noun.endsWith('y') ? `${noun.slice(0, -1)}ies` : `${noun}s`

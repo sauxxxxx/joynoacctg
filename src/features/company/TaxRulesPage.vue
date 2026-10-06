@@ -41,7 +41,7 @@ function validate(draft: TaxSettings): string {
   if (draft.availsTaxRelief && !draft.taxReliefDetails.trim()) return 'Specify the Special Law or International Tax Treaty in Others.'
   return ''
 }
-const { draft, error, notice, dirty, save, discard } = useSettingsDraft(taxSettings, 'Tax rules', validate)
+const { draft, error, notice, dirty, saving, save, discard } = useSettingsDraft(taxSettings, 'Tax rules', validate)
 </script>
 
 <template>
@@ -59,7 +59,7 @@ const { draft, error, notice, dirty, save, discard } = useSettingsDraft(taxSetti
             <p class="co-callout co-callout--warning"><AlertTriangle :size="15" aria-hidden="true" />The system does not file tax returns. After finalizing a form, file it yourself{{ draft.filingMethod ? ` through ${draft.filingMethod}` : '' }}.</p>
           </div>
           <div class="ws-panel co-card">
-            <h2 class="co-card__title">Income Tax Computation</h2>
+            <h2 class="co-card__title">Income Tax Classification</h2>
             <div class="ws-form co-form--type-atc">
               <div class="ws-field"><AppSelect id="tax-income-type" v-model="draft.incomeTaxType" label="Type" placeholder="Select type" :options="incomeTaxTypes" /></div>
               <label class="ws-field"><span>ATC</span><input v-model="draft.incomeTaxAtc" maxlength="160" placeholder="e.g. Corporation in general" /></label>
@@ -86,7 +86,7 @@ const { draft, error, notice, dirty, save, discard } = useSettingsDraft(taxSetti
           <label class="ws-field co-card__follow"><span>If yes, please specify<em v-if="draft.availsTaxRelief"> *</em></span><input v-model="draft.taxReliefDetails" maxlength="300" :disabled="!draft.availsTaxRelief" /></label>
         </div>
       </SubNavLayout>
-      <SaveBar :dirty="dirty" :error="error" @save="save" @discard="discard" />
+      <SaveBar :dirty="dirty" :error="error" :busy="saving" @save="save" @discard="discard" />
     </div>
   </section>
 </template>

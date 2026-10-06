@@ -7,7 +7,7 @@ import '../workspace/workspace.css'
 import './company.css'
 
 const props = defineProps<{ config: SettingsConfig }>()
-const { draft, error, notice, dirty, save, discard } = useSettingsDraft(props.config.store, props.config.subject, props.config.validate)
+const { draft, error, notice, dirty, saving, save, discard } = useSettingsDraft(props.config.store, props.config.subject, props.config.validate)
 </script>
 
 <template>
@@ -21,7 +21,7 @@ const { draft, error, notice, dirty, save, discard } = useSettingsDraft(props.co
           <RecordField v-for="field in section.fields" :id="`settings-${field.key}`" :key="field.key" v-model="draft[field.key]" :field="field" />
         </div>
       </div>
-      <SaveBar :dirty="dirty" :error="error" @save="save" @discard="discard" />
+      <SaveBar :dirty="dirty" :error="error" :busy="saving" @save="save" @discard="discard" />
     </div>
   </section>
 </template>

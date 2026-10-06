@@ -56,3 +56,7 @@
 .setup-button--primary { border-color: #26313b; background: #26313b; color: #fff; }
 .setup-button--primary:hover { background: #3a454f; }
 .setup-button--danger { border-color: #f1d3d7; color: #a4313f; }
+fieldset.setup-editor__fields { margin: 0; border: 0; min-width: 0; }
+.setup-button:disabled { opacity: .55; cursor: not-allowed; }
+@media (max-width: 1100px) { .setup-toolbar { flex-wrap: wrap; } .setup-toolbar__actions { flex-wrap: wrap; } }
+@media (max-width: 600px) { .setup-toolbar__actions { width: 100%; gap: 8px; } .setup-search { width: 100%; } .setup-tabs { gap: 16px; } }

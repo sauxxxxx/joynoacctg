@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { Bell, Menu, PanelLeftClose, PanelLeftOpen, Search } from '@lucide/vue'
+import { Menu, PanelLeftClose, PanelLeftOpen, Search } from '@lucide/vue'
 import { searchPages } from '../navigation'
 import type { AuthUser } from '../features/auth/authTypes'
 import AccountMenu from './AccountMenu.vue'
@@ -16,10 +16,8 @@ const emit = defineEmits<{
 
 const query = ref('')
 const searchOpen = ref(false)
-const notificationsOpen = ref(false)
 const searchInput = ref<HTMLInputElement | null>(null)
 const searchContainer = ref<HTMLElement | null>(null)
-const notificationsContainer = ref<HTMLElement | null>(null)
 const results = computed(() => searchPages(query.value).filter((page) => props.allowedPageIds.includes(page.id)).slice(0, 8))
 const shortcutLabel = ref('Ctrl K')
 
@@ -38,7 +36,6 @@ function onKeydown(event: KeyboardEvent) {
   }
   if (event.key === 'Escape') {
     searchOpen.value = false
-    notificationsOpen.value = false
     searchInput.value?.blur()
   }
 }
@@ -46,7 +43,6 @@ function onKeydown(event: KeyboardEvent) {
 function onPointerDown(event: PointerEvent) {
   const target = event.target as Node
   if (!searchContainer.value?.contains(target)) searchOpen.value = false
-  if (!notificationsContainer.value?.contains(target)) notificationsOpen.value = false
 }
 
 onMounted(() => {
@@ -97,15 +93,6 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="topbar__actions">
-      <div ref="notificationsContainer" class="topbar__popover-wrap">
-        <button class="icon-button" type="button" aria-label="Notifications" :aria-expanded="notificationsOpen" @click="notificationsOpen = !notificationsOpen">
-          <Bell :size="18" aria-hidden="true" />
-        </button>
-        <div v-if="notificationsOpen" class="notification-popover" role="status">
-          <strong>Notifications</strong>
-          <p>You're all caught up.</p>
-        </div>
-      </div>
       <div class="topbar__divider" />
       <AccountMenu :user="user" @navigate="select" @logout="emit('logout')" />
     </div>

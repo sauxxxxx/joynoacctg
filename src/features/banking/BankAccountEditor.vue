@@ -6,7 +6,7 @@ import { useSubmit } from '../../lib/useSubmit'
 import { accountOptions, findAccount } from '../accounting/setup/accountSetupData'
 import { emptyBankAccount, type BankAccountRecord } from './bankingData'
 
-const props = defineProps<{ open: boolean; record: BankAccountRecord | null; save: (record: BankAccountRecord) => Promise<void> }>()
+const props = defineProps<{ open: boolean; record: BankAccountRecord | null; save: (record: BankAccountRecord) => Promise<void>; readonly?: boolean; canDelete?: boolean; busy?: boolean }>()
 const emit = defineEmits<{ close: []; delete: [record: BankAccountRecord] }>()
 const dialog = ref<HTMLDialogElement | null>(null)
 const draft = ref(emptyBankAccount())
@@ -25,6 +25,7 @@ watch(() => [props.open, props.record] as const, async ([open]) => {
 const fieldError = (field: string) => submit.fieldErrors.value[field]?.[0] ?? ''
 
 async function submitForm() {
+  if (props.readonly || props.busy || submit.pending.value) return
   localError.value = ''
   if (!draft.value.name.trim()) { localError.value = 'Enter a name for this bank account.'; return }
   if (!findAccount(draft.value.ledgerAccountId)?.active) { localError.value = 'Choose the ledger account used for transactions.'; return }
@@ -40,10 +41,10 @@ async function submitForm() {
 </script>
 
 <template>
-  <dialog ref="dialog" class="banking-editor" :aria-label="`${record ? 'Edit' : 'New'} bank account`" @close="emit('close')">
+  <dialog ref="dialog" class="banking-editor" :aria-label="`${record ? 'Edit' : 'New'} bank account`" @close="emit('close')" @cancel="(busy || submit.pending.value) && $event.preventDefault()">
     <form @submit.prevent="submitForm">
-      <header><div><h2>{{ record ? 'Edit bank account' : 'New bank account' }}</h2><p>Connect the bank record to the ledger account used in transactions.</p></div><button type="button" aria-label="Close form" @click="dialog?.close()"><X :size="18" /></button></header>
-      <div class="banking-editor__fields">
+      <header><div><h2>{{ record ? 'Bank account' : 'New bank account' }}</h2><p>Connect the bank record to the ledger account used in transactions.</p></div><button type="button" aria-label="Close form" :disabled="busy || submit.pending.value" @click="dialog?.close()"><X :size="18" /></button></header>
+      <fieldset class="banking-editor__fields" :disabled="readonly || busy || submit.pending.value" style="border: 0; margin: 0">
         <label>Name <span>*</span><input v-model="draft.name" required maxlength="140" placeholder="e.g. JOYNO INC" :aria-invalid="Boolean(fieldError('name'))" /></label>
         <label>Account number<input v-model="draft.accountNumber" maxlength="80" inputmode="numeric" :aria-invalid="Boolean(fieldError('accountNumber'))" /></label>
         <label>Bank<input v-model="draft.bank" maxlength="140" placeholder="Bank name" /></label>
@@ -51,8 +52,8 @@ async function submitForm() {
         <label class="banking-editor__wide">Remarks<textarea v-model="draft.remarks" rows="3" maxlength="300" /></label>
         <label class="banking-editor__check"><input v-model="draft.active" type="checkbox" /> This bank account is active</label>
         <p v-if="localError || submit.error.value" class="banking-editor__error" role="alert">{{ localError || submit.error.value }}</p>
-      </div>
-      <footer><button v-if="draft.id" class="banking-button banking-button--danger" type="button" :disabled="submit.pending.value" @click="emit('delete', draft)"><Trash2 :size="15" /> Delete</button><span /><button class="banking-button" type="button" @click="dialog?.close()">Cancel</button><button class="banking-button banking-button--primary" type="submit" :disabled="submit.pending.value">{{ submit.pending.value ? 'Saving…' : 'Save account' }}</button></footer>
+      </fieldset>
+      <footer><button v-if="draft.id && canDelete" class="banking-button banking-button--danger" type="button" :disabled="busy || submit.pending.value" @click="emit('delete', draft)"><Trash2 :size="15" /> Delete</button><span /><button class="banking-button" type="button" :disabled="busy || submit.pending.value" @click="dialog?.close()">{{ readonly ? 'Close' : 'Cancel' }}</button><button v-if="!readonly" class="banking-button banking-button--primary" type="submit" :disabled="busy || submit.pending.value">{{ submit.pending.value ? 'Saving…' : 'Save account' }}</button></footer>
     </form>
   </dialog>
 </template>

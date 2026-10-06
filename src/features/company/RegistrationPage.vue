@@ -37,7 +37,7 @@ function validate(draft: RegistrationSettings): string {
   return ''
 }
 
-const { draft, error, notice, dirty, save, discard } = useSettingsDraft(registrationSettings, 'Registration', validate)
+const { draft, error, notice, dirty, saving, save, discard } = useSettingsDraft(registrationSettings, 'Registration', validate)
 const selectedBooks = ref<string[]>([])
 const allBooksSelected = computed(() => draft.value.books.length > 0 && draft.value.books.every((book) => selectedBooks.value.includes(book.id)))
 
@@ -99,7 +99,7 @@ function toggleBook(id: string) {
           </div>
         </div>
       </SubNavLayout>
-      <SaveBar :dirty="dirty" :error="error" @save="save" @discard="discard" />
+      <SaveBar :dirty="dirty" :error="error" :busy="saving" @save="save" @discard="discard" />
     </div>
   </section>
 </template>

@@ -2,9 +2,9 @@ import type { Ref } from 'vue'
 import type { ZodType } from 'zod'
 import type { SelectOption } from '../../components/ui/AppSelect.vue'
 
-export type AnyRecord = { id: string; [key: string]: unknown }
+export type AnyRecord = { id: string; version?: number; [key: string]: unknown }
 
-export type FieldType = 'text' | 'textarea' | 'number' | 'money' | 'percent' | 'email' | 'date' | 'select' | 'checkbox'
+export type FieldType = 'text' | 'textarea' | 'number' | 'money' | 'percent' | 'email' | 'date' | 'select' | 'checkbox' | 'password'
 
 export interface FieldDef {
   key: string

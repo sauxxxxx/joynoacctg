@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { ZodError } from 'zod'
+import { config } from '../config.js'
 
 export class ApiFailure extends Error {
   constructor(code, status, message, fieldErrors = {}) {
@@ -23,7 +24,7 @@ export function sendData(req, res, data, status = 200) {
 
 export function errorHandler(error, req, res, _next) {
   if (error.type === 'entity.parse.failed') error = new ApiFailure('VALIDATION_ERROR', 422, 'Request body must be valid JSON.')
-  if (error.type === 'entity.too.large') error = new ApiFailure('VALIDATION_ERROR', 413, 'Request body exceeds the 1 MB limit.')
+  if (error.type === 'entity.too.large') error = new ApiFailure('VALIDATION_ERROR', 413, 'The request exceeds the size allowed for this action.')
   if (error instanceof ZodError) {
     const fieldErrors = {}
     for (const issue of error.issues) {
@@ -33,7 +34,7 @@ export function errorHandler(error, req, res, _next) {
     error = new ApiFailure('VALIDATION_ERROR', 422, 'Check the highlighted fields.', fieldErrors)
   }
   if (!(error instanceof ApiFailure)) {
-    console.error(`[${req.requestId}]`, error)
+    console.error(`[${req.requestId}]`, config.production ? { code: error.code || 'INTERNAL_ERROR' } : error)
     error = new ApiFailure('INTERNAL_ERROR', 500, 'An unexpected error occurred.')
   }
   res.status(error.status).json({ error: {

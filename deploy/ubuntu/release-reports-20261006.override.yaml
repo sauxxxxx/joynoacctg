@@ -1,0 +1,5 @@
+services:
+  migrate:
+    image: joyno-accounting-api:verify-20261006-05
+  api:
+    image: joyno-accounting-api:verify-20261006-05

@@ -4,6 +4,7 @@ const definitions = {
   accounts: { table: 'accounts', fields: { code: 'code', name: 'name', parentCode: 'parent_code', type: 'type', remarks: 'remarks', active: 'active', itr: 'itr', legalBasis: 'legal_basis' } },
   categories: { table: 'account_categories', fields: { code: 'code', name: 'name', parentCode: 'parent_code', remarks: 'remarks', active: 'active', accountType: 'account_type' } },
 }
+const placeholders = (count) => Array.from({ length: count }, (_, index) => `$${index + 1}`)
 
 export function accountRepository(db, kind) {
   const { table, fields } = definitions[kind]
@@ -12,50 +13,59 @@ export function accountRepository(db, kind) {
     ...Object.fromEntries(pairs.map(([key, column]) => [key, key === 'active' ? Boolean(row[column]) : row[column] ?? undefined])),
   })
   const values = (record) => pairs.map(([key]) => key === 'active' ? Number(record.active) : record[key] ?? null)
-  const get = (companyId, id) => map(db.prepare(`SELECT * FROM ${table} WHERE company_id = ? AND id = ?`).get(companyId, id))
+  const first = async (sql, parameters) => map((await db.query(sql, parameters)).rows[0])
+  const get = (companyId, id) => first(`SELECT * FROM ${table} WHERE company_id = $1 AND id = $2`, [companyId, id])
 
   return {
     get,
-    byCode(companyId, code) { return map(db.prepare(`SELECT * FROM ${table} WHERE company_id = ? AND code = ?`).get(companyId, code)) },
-    children(companyId, parentCode) { return db.prepare(`SELECT id FROM ${table} WHERE company_id = ? AND parent_code = ?`).all(companyId, parentCode) },
-    list(companyId, query) {
-      const clauses = ['company_id = ?']
+    byCode: (companyId, code) => first(`SELECT * FROM ${table} WHERE company_id = $1 AND code = $2`, [companyId, code]),
+    async children(companyId, parentCode) {
+      return (await db.query(`SELECT id FROM ${table} WHERE company_id = $1 AND parent_code = $2`, [companyId, parentCode])).rows
+    },
+    async list(companyId, query) {
+      const clauses = ['company_id = $1']
       const bindings = [companyId]
       if (query.search) {
-        const pattern = `%${query.search.replace(/[\\%_]/g, '\\$&')}%`
-        clauses.push("(code LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\')")
-        bindings.push(pattern, pattern)
+        bindings.push(`%${query.search.toLowerCase().replace(/[\\%_]/g, '\\$&')}%`)
+        const position = `$${bindings.length}`
+        clauses.push(`(lower(code) LIKE ${position} ESCAPE '\\' OR lower(name) LIKE ${position} ESCAPE '\\')`)
       }
-      if (query.active !== undefined) { clauses.push('active = ?'); bindings.push(Number(query.active === 'true')) }
+      if (query.active !== undefined) {
+        bindings.push(Number(query.active === 'true'))
+        clauses.push(`active = $${bindings.length}`)
+      }
       const where = clauses.join(' AND ')
-      const total = db.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE ${where}`).get(...bindings).count
+      const total = Number((await db.query(`SELECT COUNT(*) AS count FROM ${table} WHERE ${where}`, bindings)).rows[0].count)
       const column = fields[query.sortBy]
       const direction = query.sortDirection === 'desc' ? 'DESC' : 'ASC'
-      const rows = db.prepare(`SELECT * FROM ${table} WHERE ${where} ORDER BY ${column} ${direction}, id ASC LIMIT ? OFFSET ?`)
-        .all(...bindings, query.pageSize, (query.page - 1) * query.pageSize)
+      const { rows } = await db.query(`SELECT * FROM ${table} WHERE ${where} ORDER BY ${column} ${direction}, id ASC
+        LIMIT $${bindings.length + 1} OFFSET $${bindings.length + 2}`,
+      [...bindings, query.pageSize, (query.page - 1) * query.pageSize])
       return { data: rows.map(map), page: query.page, pageSize: query.pageSize, total, totalPages: Math.max(1, Math.ceil(total / query.pageSize)) }
     },
     create(companyId, record) {
       const id = randomUUID()
       const columns = pairs.map(([, column]) => column)
-      db.prepare(`INSERT INTO ${table} (id, company_id, ${columns.join(', ')}) VALUES (${Array(columns.length + 2).fill('?').join(', ')})`)
-        .run(id, companyId, ...values(record))
-      return get(companyId, id)
+      return first(`INSERT INTO ${table} (id, company_id, ${columns.join(', ')})
+        VALUES (${placeholders(columns.length + 2).join(', ')}) RETURNING *`, [id, companyId, ...values(record)])
     },
     update(companyId, id, record, expectedVersion) {
-      const result = db.prepare(`UPDATE ${table} SET ${pairs.map(([, column]) => `${column} = ?`).join(', ')}, version = version + 1 WHERE company_id = ? AND id = ? AND version = ?`)
-        .run(...values(record), companyId, id, expectedVersion)
-      return result.changes ? get(companyId, id) : null
+      const assignments = pairs.map(([, column], index) => `${column} = $${index + 1}`)
+      const offset = pairs.length
+      return first(`UPDATE ${table} SET ${assignments.join(', ')}, version = version + 1
+        WHERE company_id = $${offset + 1} AND id = $${offset + 2} AND version = $${offset + 3} RETURNING *`,
+      [...values(record), companyId, id, expectedVersion])
     },
-    remove(companyId, id, expectedVersion) {
-      return db.prepare(`DELETE FROM ${table} WHERE company_id = ? AND id = ? AND version = ?`).run(companyId, id, expectedVersion).changes
+    async remove(companyId, id, expectedVersion) {
+      return (await db.query(`DELETE FROM ${table} WHERE company_id = $1 AND id = $2 AND version = $3`,
+        [companyId, id, expectedVersion])).rowCount
     },
   }
 }
 
-export function appendAudit(db, context, action, kind, id, before, after) {
-  db.prepare(`INSERT INTO audit_events (id, company_id, actor_user_id, action, entity_type, entity_id, before_json, after_json, request_id, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(randomUUID(), context.companyId, context.userId, action, kind, id,
-      before ? JSON.stringify(before) : null, after ? JSON.stringify(after) : null, context.requestId, new Date().toISOString())
+export async function appendAudit(db, context, action, kind, id, before, after) {
+  await db.query(`INSERT INTO audit_events (id, company_id, actor_user_id, action, entity_type, entity_id, before_json, after_json, request_id, created_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+  [randomUUID(), context.companyId, context.userId, action, kind, id,
+    before ? JSON.stringify(before) : null, after ? JSON.stringify(after) : null, context.requestId, new Date().toISOString()])
 }

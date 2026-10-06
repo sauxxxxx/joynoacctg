@@ -4,6 +4,9 @@ import { Trash2 } from '@lucide/vue'
 import AppSelect from '../../../components/ui/AppSelect.vue'
 import { recordAudit } from '../../company/companyStore'
 import { customerRepository } from '../../../services/previewRepositories'
+import { useSubmit } from '../../../lib/useSubmit'
+import { useAuth } from '../../auth/authStore'
+import { usePermissions } from '../../auth/permissions'
 import SalesEditorShell from '../SalesEditorShell.vue'
 import { salesDocuments } from '../salesPreviewStore'
 import { blankCustomer, customers, type Customer, type CustomerType } from './customerPreviewStore'
@@ -19,6 +22,10 @@ const initial = JSON.stringify(draft.value)
 const dirty = computed(() => JSON.stringify(draft.value) !== initial)
 const submitted = ref(false)
 const saveError = ref('')
+const submit = useSubmit()
+const { authUser } = useAuth()
+const { can } = usePermissions(authUser)
+const editable = computed(() => can('Sales', props.customer ? 'edit' : 'create'))
 const deleteDialog = ref<HTMLDialogElement | null>(null)
 
 // Assumption pending confirmation: the legacy Customer Type list has Company and Individual.
@@ -39,6 +46,7 @@ const errors = computed(() => {
 const shown = (key: string) => submitted.value ? errors.value[key] : ''
 
 async function save() {
+  if (!editable.value || submit.pending.value) return
   submitted.value = true
   const first = Object.values(errors.value)[0]
   saveError.value = first ? `Please fix the highlighted fields.` : ''
@@ -47,15 +55,14 @@ async function save() {
   const isNew = !value.id
   const trimmed = Object.fromEntries(Object.entries(value).map(([key, item]) => [key, typeof item === 'string' ? item.trim() : item])) as Draft
   const saved: Customer = { ...trimmed, id: value.id || crypto.randomUUID(), tradeName: isCompany.value ? trimmed.tradeName : '' }
-  // Only one customer can be the default.
-  const others = customers.value.filter((item) => item.id !== saved.id).map((item) => saved.isDefault ? { ...item, isDefault: false } : item)
-  if (saved.isDefault) await Promise.all(others.filter((item) => item.isDefault).map((item) => customerRepository.save({ ...item, isDefault: false })))
-  await customerRepository.save(saved)
+  // The server changes the default customer atomically with this save.
+  if (!await submit.run(() => customerRepository.save(saved))) return
   recordAudit('Sales', isNew ? 'Created' : 'Updated', `Customer: ${saved.name}`)
   emit('saved', `${saved.name} ${isNew ? 'added' : 'updated'}.`)
 }
 
 function askDelete() {
+  if (!can('Sales', 'delete') || submit.pending.value) return
   if (salesDocuments.value.some((doc) => doc.customerId === draft.value.id)) {
     saveError.value = 'This customer is used by a sales document. Clear "active" instead of deleting it.'
     return
@@ -64,8 +71,12 @@ function askDelete() {
 }
 
 async function remove() {
+  if (!can('Sales', 'delete') || submit.pending.value) return
   const name = draft.value.name
-  await customerRepository.remove(draft.value.id)
+  if (!await submit.run(() => customerRepository.remove(draft.value.id, draft.value.version))) {
+    deleteDialog.value?.close()
+    return
+  }
   recordAudit('Sales', 'Deleted', `Customer: ${name}`)
   deleteDialog.value?.close()
   emit('deleted', `${name} deleted.`)
@@ -73,7 +84,7 @@ async function remove() {
 </script>
 
 <template>
-  <SalesEditorShell :title="customer ? 'Customer' : 'New Customer'" :subtitle="customer?.name" :dirty="dirty" :error="saveError" @save="save" @close="emit('close')">
+  <SalesEditorShell :title="customer ? 'Customer' : 'New Customer'" :subtitle="customer?.name" :dirty="dirty" :error="saveError || submit.error.value" :busy="submit.pending.value" :readonly="!editable" @save="save" @close="emit('close')">
     <div class="sales-card">
       <h3 class="sales-card__title">Name</h3>
       <div class="sales-form sales-card__form">
@@ -128,13 +139,13 @@ async function remove() {
     </div>
 
     <template #extra-actions>
-      <button v-if="customer" class="sales-button sales-button--ghost-danger" type="button" @click="askDelete"><Trash2 :size="15" aria-hidden="true" /> Delete</button>
+      <button v-if="customer && can('Sales', 'delete')" class="sales-button sales-button--ghost-danger" type="button" :disabled="submit.pending.value" @click="askDelete"><Trash2 :size="15" aria-hidden="true" /> Delete</button>
     </template>
   </SalesEditorShell>
 
-  <dialog ref="deleteDialog" class="sales-dialog sales-dialog--small" aria-label="Confirm deletion">
+  <dialog ref="deleteDialog" class="sales-dialog sales-dialog--small" aria-label="Confirm deletion" @cancel="submit.pending.value && $event.preventDefault()">
     <div class="sales-dialog__header"><h2>Delete customer?</h2></div>
     <p class="sales-dialog__body">Remove <strong>{{ draft.name }}</strong>? This cannot be undone.</p>
-    <div class="sales-dialog__footer"><button class="sales-button" type="button" @click="deleteDialog?.close()">Cancel</button><button class="sales-button sales-button--danger" type="button" @click="remove">Delete</button></div>
+    <div class="sales-dialog__footer"><button class="sales-button" type="button" :disabled="submit.pending.value" @click="deleteDialog?.close()">Cancel</button><button class="sales-button sales-button--danger" type="button" :disabled="submit.pending.value" @click="remove">{{ submit.pending.value ? 'Deleting…' : 'Delete' }}</button></div>
   </dialog>
 </template>

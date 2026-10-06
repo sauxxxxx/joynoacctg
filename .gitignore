@@ -8,3 +8,5 @@ dist/
 .playwright-cli/
 output/playwright/
 server/data/
+deploy/ubuntu/backups/
+deploy/ubuntu/*.local.tar.gz

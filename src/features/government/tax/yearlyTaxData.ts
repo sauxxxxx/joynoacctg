@@ -11,6 +11,7 @@ export interface YearlyTaxConfig {
 
 export interface YearlyTaxRecord {
   id: string
+  version?: number
   formId: YearlyTaxFormId
   year: number
   status: 'Draft' | 'Filed'

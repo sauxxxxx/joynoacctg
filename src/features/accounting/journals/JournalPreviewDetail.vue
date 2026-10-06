@@ -4,8 +4,8 @@ import type { JournalPreviewEntry } from './journalPreviewData'
 import { formatJournalAmount, journalLineTotals } from './purchaseJournalData'
 import { accountName } from '../setup/accountSetupData'
 
-const props = defineProps<{ entry: JournalPreviewEntry | null; editable?: boolean }>()
-const emit = defineEmits<{ edit: [entry: JournalPreviewEntry] }>()
+const props = defineProps<{ entry: JournalPreviewEntry | null; editable?: boolean; canDelete?: boolean }>()
+const emit = defineEmits<{ edit: [entry: JournalPreviewEntry]; delete: [entry: JournalPreviewEntry] }>()
 const totals = computed(() => journalLineTotals(props.entry?.lines ?? []))
 const balanced = computed(() => totals.value.debitCents === totals.value.creditCents)
 </script>
@@ -33,9 +33,10 @@ const balanced = computed(() => totals.value.debitCents === totals.value.creditC
           </tr></tbody>
         </table>
       </div>
-      <p v-else class="journal-detail__empty">Accounting lines were not shown for this reference sample.</p>
-      <div v-if="editable && entry.status === 'Draft'" class="journal-preview-detail__actions">
-        <button class="journal-button journal-button--secondary" type="button" @click="emit('edit', entry)">Edit draft</button>
+      <p v-else class="journal-detail__empty">No accounting lines are available for this entry.</p>
+      <div v-if="(editable || canDelete) && entry.status === 'Draft'" class="journal-preview-detail__actions">
+        <button v-if="editable" class="journal-button journal-button--secondary" type="button" @click="emit('edit', entry)">Edit draft</button>
+        <button v-if="canDelete" class="journal-button journal-button--secondary" type="button" @click="emit('delete', entry)">Delete draft</button>
       </div>
     </template>
     <p v-else class="journal-detail__empty">Select a journal entry to view its accounting lines.</p>

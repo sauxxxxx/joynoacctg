@@ -1,0 +1,14 @@
+[Unit]
+Description=Joyno accounting PostgreSQL backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/joynoacctg/deploy/ubuntu
+ExecStart=/bin/sh /opt/joynoacctg/deploy/ubuntu/backup.sh
+UMask=0077
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+TimeoutStartSec=1h

@@ -22,6 +22,7 @@ test('administrator bootstrap persists data, reopens migrations, and refuses a s
   const databasePath = join(directory, 'test.sqlite')
   const bootstrap = fileURLToPath(new URL('../cli/bootstrap.js', import.meta.url))
   const options = { encoding: 'utf8', env: { ...process.env,
+    NODE_ENV: 'test', JOYNO_DB_DRIVER: 'sqlite',
     JOYNO_DB_PATH: databasePath, JOYNO_ADMIN_USERNAME: 'setup-test', JOYNO_ADMIN_PASSWORD: password, JOYNO_COMPANY_NAME: 'Setup test',
   } }
   const first = spawnSync(process.execPath, [bootstrap], options)
@@ -35,7 +36,7 @@ test('administrator bootstrap persists data, reopens migrations, and refuses a s
     assert.equal(user.username, 'setup-test')
     assert.notEqual(user.password_hash, password)
     assert.equal(await verifyPassword(password, user.password_hash), true)
-    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get().count, 1)
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get().count, 4)
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM company_memberships').get().count, 1)
   } finally { db.close() }
 })

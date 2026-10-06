@@ -5,6 +5,9 @@ import AppSelect from '../../components/ui/AppSelect.vue'
 import { accountName, accounts } from '../accounting/setup/accountSetupData'
 import { recordAudit } from '../company/companyStore'
 import { salesSetupRepository } from '../../services/previewRepositories'
+import { useSubmit } from '../../lib/useSubmit'
+import { useAuth } from '../auth/authStore'
+import { usePermissions } from '../auth/permissions'
 import SalesEditorShell from './SalesEditorShell.vue'
 import { reportDate } from './salesFormat'
 import { salesDocuments, setupRecords, type PeriodUnit, type SetupKind, type SetupRecord } from './salesPreviewStore'
@@ -31,6 +34,10 @@ const dirty = computed(() => JSON.stringify(draft.value) !== initial)
 const submitted = ref(false)
 const deleteDialog = ref<HTMLDialogElement | null>(null)
 const saveError = ref('')
+const submit = useSubmit()
+const { authUser } = useAuth()
+const { can } = usePermissions(authUser)
+const editable = computed(() => can('Sales', props.record ? 'edit' : 'create'))
 
 const unitOptions = (['Days', 'Months', 'Years'] as PeriodUnit[]).map((value) => ({ value, label: value }))
 const computationOptions = [{ value: 'Amount', label: 'Amount' }, { value: 'Percentage', label: 'Percentage' }]
@@ -72,6 +79,7 @@ const schedule = computed(() => {
 })
 
 async function save() {
+  if (!editable.value || submit.pending.value) return
   submitted.value = true
   const first = Object.values(errors.value)[0]
   saveError.value = first ? `Please fix the highlighted fields.` : ''
@@ -89,12 +97,13 @@ async function save() {
     frequencyEvery: isTerm && multiple.value ? Math.trunc(Number(value.frequencyEvery)) : 0,
     frequencyUnit: isTerm && multiple.value ? value.frequencyUnit : '',
   }
-  await salesSetupRepository.save(record)
+  if (!await submit.run(() => salesSetupRepository.save(record))) return
   recordAudit('Sales', isNew ? 'Created' : 'Updated', `${label}: ${record.name}`)
   emit('saved', `${record.name} ${isNew ? 'added' : 'updated'}.`)
 }
 
 function askDelete() {
+  if (!can('Sales', 'delete') || submit.pending.value) return
   const id = draft.value.id
   const used = salesDocuments.value.some((doc) => doc.paymentTermId === id || doc.paymentMethodId === id || doc.discountTypeId === id)
   if (used) {
@@ -105,8 +114,12 @@ function askDelete() {
 }
 
 async function remove() {
+  if (!can('Sales', 'delete') || submit.pending.value) return
   const name = draft.value.name
-  await salesSetupRepository.remove(draft.value.id)
+  if (!await submit.run(() => salesSetupRepository.remove(draft.value.id, draft.value.version))) {
+    deleteDialog.value?.close()
+    return
+  }
   recordAudit('Sales', 'Deleted', `${label}: ${name}`)
   deleteDialog.value?.close()
   emit('deleted', `${name} deleted.`)
@@ -114,7 +127,7 @@ async function remove() {
 </script>
 
 <template>
-  <SalesEditorShell :title="record ? label : `New ${label}`" :subtitle="record?.name" :dirty="dirty" :error="saveError" @save="save" @close="emit('close')">
+  <SalesEditorShell :title="record ? label : `New ${label}`" :subtitle="record?.name" :dirty="dirty" :error="saveError || submit.error.value" :busy="submit.pending.value" :readonly="!editable" @save="save" @close="emit('close')">
     <div class="sales-card">
       <h3 class="sales-card__title">Details</h3>
       <div class="sales-form sales-card__form">
@@ -153,7 +166,7 @@ async function remove() {
 
     <div class="sales-card">
       <h3 class="sales-card__title">Accounting</h3>
-      <p class="sales-card__note">{{ isTerm ? 'Every invoice using this payment term will create a debit entry to the following account.' : isDiscount ? 'Discounts given on invoices are recorded in the following account.' : 'Receipts paid by this method are recorded in the following account.' }}</p>
+      <p class="sales-card__note">Choose the account to associate with this {{ label.toLocaleLowerCase() }}.</p>
       <div class="sales-form sales-card__form">
         <div class="sales-card__narrow"><AppSelect v-model="draft.accountId" label="Account" :options="accountOptions" placeholder="Choose account" /><small class="sales-field-hint">{{ draft.accountId ? accountName(draft.accountId) : 'Choose from the Chart of Accounts.' }}</small></div>
       </div>
@@ -173,13 +186,13 @@ async function remove() {
     </div>
 
     <template #extra-actions>
-      <button v-if="record" class="sales-button sales-button--ghost-danger" type="button" @click="askDelete"><Trash2 :size="15" aria-hidden="true" /> Delete</button>
+      <button v-if="record && can('Sales', 'delete')" class="sales-button sales-button--ghost-danger" type="button" :disabled="submit.pending.value" @click="askDelete"><Trash2 :size="15" aria-hidden="true" /> Delete</button>
     </template>
   </SalesEditorShell>
 
-  <dialog ref="deleteDialog" class="sales-dialog sales-dialog--small" aria-label="Confirm deletion">
+  <dialog ref="deleteDialog" class="sales-dialog sales-dialog--small" aria-label="Confirm deletion" @cancel="submit.pending.value && $event.preventDefault()">
     <div class="sales-dialog__header"><h2>Delete {{ label.toLocaleLowerCase() }}?</h2></div>
     <p class="sales-dialog__body">Remove <strong>{{ draft.name }}</strong>? This cannot be undone.</p>
-    <div class="sales-dialog__footer"><button class="sales-button" type="button" @click="deleteDialog?.close()">Cancel</button><button class="sales-button sales-button--danger" type="button" @click="remove">Delete</button></div>
+    <div class="sales-dialog__footer"><button class="sales-button" type="button" :disabled="submit.pending.value" @click="deleteDialog?.close()">Cancel</button><button class="sales-button sales-button--danger" type="button" :disabled="submit.pending.value" @click="remove">{{ submit.pending.value ? 'Deleting…' : 'Delete' }}</button></div>
   </dialog>
 </template>

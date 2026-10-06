@@ -10,7 +10,7 @@ import { amountInCents, validateJournalDraft, type JournalDraftInput } from './j
 import { formatJournalAmount } from './purchaseJournalData'
 import type { JournalPreviewEntry } from './journalPreviewData'
 
-const props = defineProps<{ open: boolean; entry: JournalPreviewEntry | null; nextJournalNumber: string }>()
+const props = withDefaults(defineProps<{ open: boolean; entry: JournalPreviewEntry | null; nextJournalNumber: string; busy?: boolean; serverError?: string }>(), { busy: false, serverError: '' })
 useCollections(accountStore)
 const emit = defineEmits<{ close: []; save: [entry: JournalPreviewEntry] }>()
 const dialog = ref<HTMLDialogElement | null>(null)
@@ -67,28 +67,28 @@ watch(() => [props.open, props.entry, props.nextJournalNumber] as const, async (
 }, { immediate: true })
 
 function save() {
+  if (props.busy) return
   const result = validateJournalDraft(draft.value, props.entry ?? undefined)
   if (!result.entry) {
     error.value = result.error ?? 'Check the journal entry.'
     return
   }
   emit('save', result.entry)
-  emit('close')
 }
 
 function onBackdropClick(event: MouseEvent) {
-  if (event.target === dialog.value) emit('close')
+  if (!props.busy && event.target === dialog.value) emit('close')
 }
 </script>
 
 <template>
-  <dialog ref="dialog" class="journal-editor" aria-label="General Journal draft" @cancel.prevent="emit('close')" @click="onBackdropClick">
+  <dialog ref="dialog" class="journal-editor" aria-label="General Journal draft" @cancel.prevent="!busy && emit('close')" @click="onBackdropClick">
     <form class="journal-editor__form" @submit.prevent="save">
       <header class="journal-editor__header">
-        <div><h2>{{ entry ? 'Edit General Journal draft' : 'New General Journal draft' }}</h2><p>Preview only · Drafts are cleared when this browser session is refreshed. Nothing is posted.</p></div>
-        <button class="icon-button" type="button" aria-label="Close draft editor" @click="emit('close')"><X :size="18" /></button>
+        <div><h2>{{ entry ? 'Edit General Journal draft' : 'New General Journal draft' }}</h2><p>Draft entries affect your financial statements only after posting.</p></div>
+        <button class="icon-button" type="button" aria-label="Close draft editor" :disabled="busy" @click="emit('close')"><X :size="18" /></button>
       </header>
-      <div class="journal-editor__body">
+      <fieldset class="journal-editor__body" :disabled="busy">
         <div class="journal-editor__fields">
           <label>GJ #<input v-model="draft.journalNumber" type="text" readonly aria-readonly="true" /></label>
           <AppSelect id="general-journal-type" v-model="draft.journalType" label="General Journal type" required placeholder="Choose journal type" :options="journalTypeOptions" :invalid="Boolean(error && !draft.journalType)" />
@@ -108,8 +108,11 @@ function onBackdropClick(event: MouseEvent) {
         <button class="journal-button journal-button--secondary" type="button" @click="draft.lines.push(blankLine())"><Plus :size="15" /> Add line</button>
         <div class="journal-editor__totals"><span>Totals</span><span>Debit {{ formatJournalAmount(totals.debitCents) }}</span><span>Credit {{ formatJournalAmount(totals.creditCents) }}</span></div>
         <p v-if="error" class="journal-date-filter__error" role="alert">{{ error }}</p>
-      </div>
-      <footer class="journal-editor__footer"><button class="journal-button journal-button--secondary" type="button" @click="emit('close')">Cancel</button><button class="journal-button journal-button--primary" type="submit">Save draft</button></footer>
+      </fieldset>
+      <p v-if="serverError" class="journal-editor__error" role="alert">{{ serverError }}</p>
+      <footer class="journal-editor__footer"><button class="journal-button journal-button--secondary" type="button" :disabled="busy" @click="emit('close')">Cancel</button><button class="journal-button journal-button--primary" type="submit" :disabled="busy">{{ busy ? 'Saving…' : 'Save draft' }}</button></footer>
     </form>
   </dialog>
 </template>
+
+<style scoped>fieldset.journal-editor__body { margin: 0; border: 0; min-width: 0; }</style>

@@ -18,6 +18,7 @@ export interface TaxFormConfig {
 
 export interface TaxFormRecord {
   id: string
+  version?: number
   formId: TaxFormId
   year: number
   status: TaxStatus

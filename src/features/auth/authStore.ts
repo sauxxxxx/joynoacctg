@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { dataMode } from '../../services/api/config'
+import { apiConfig, dataMode } from '../../services/api/config'
 import { onSessionExpired, setApiCredentials } from '../../services/api/session'
 import { resetCollectionStores } from '../../services/collectionStore'
 import { resetSettingsStores } from '../../services/settingsStore'
@@ -8,7 +8,7 @@ import { mockAuthService } from './mockAuthService'
 import { AuthenticationError, type AuthCredentials, type AuthSession, type AuthUser } from './authTypes'
 import { isSessionExpired } from './authSession'
 
-const SESSION_KEY = dataMode === 'api' ? 'joyno.auth-session' : 'joyno.preview-auth-session'
+const SESSION_KEY = dataMode === 'api' ? `joyno.auth-session:${encodeURIComponent(apiConfig.baseUrl)}` : 'joyno.preview-auth-session'
 const authService = dataMode === 'api' ? apiAuthService : mockAuthService
 
 function isAuthUser(value: unknown): value is AuthUser {
@@ -32,8 +32,9 @@ function restoreSession(): AuthSession | null {
     const stored = window.sessionStorage.getItem(SESSION_KEY)
     if (!stored) return null
     const session = JSON.parse(stored) as Partial<AuthSession>
-    if (!isAuthUser(session.user) || typeof session.expiresAt !== 'number' || isSessionExpired(session.expiresAt)
-      || typeof session.companyId !== 'string' || typeof session.accessToken !== 'string') {
+    if (!isAuthUser(session.user) || !session.user.active || typeof session.expiresAt !== 'number' || isSessionExpired(session.expiresAt)
+      || typeof session.companyId !== 'string' || !session.companyId || typeof session.accessToken !== 'string'
+      || (dataMode === 'api' && !session.accessToken)) {
       removeStoredSession()
       return null
     }
@@ -49,6 +50,7 @@ const authUser = ref<AuthUser | null>(session?.user ?? null)
 const authenticating = ref(false)
 const authError = ref('')
 let expiryTimer: number | undefined
+let attempt = 0
 
 function clearSession(message = '') {
   if (expiryTimer) window.clearTimeout(expiryTimer)
@@ -74,10 +76,15 @@ if (session) activate(session)
 onSessionExpired((message) => { if (session) clearSession(message) })
 
 async function signIn(credentials: AuthCredentials) {
+  const current = ++attempt
   authenticating.value = true
   authError.value = ''
   try {
     const next = await authService.signIn(credentials)
+    if (current !== attempt) {
+      void authService.signOut(next).catch(() => undefined)
+      return false
+    }
     try {
       window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(next))
     } catch {
@@ -86,16 +93,19 @@ async function signIn(credentials: AuthCredentials) {
     activate(next)
     return true
   } catch (error) {
+    if (current !== attempt) return false
     authError.value = error instanceof AuthenticationError ? error.message : 'Sign in could not be completed. Try again.'
     return false
   } finally {
-    authenticating.value = false
+    if (current === attempt) authenticating.value = false
   }
 }
 
-function signOut() {
+function signOut(message = '') {
+  attempt += 1
+  authenticating.value = false
   const current = session
-  clearSession()
+  clearSession(message)
   // The server revokes the token; the local session is already gone, so a failure here is not shown.
   if (current) void authService.signOut(current).catch(() => undefined)
 }

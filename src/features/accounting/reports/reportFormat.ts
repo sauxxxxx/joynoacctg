@@ -1,3 +1,4 @@
+import { csvCell } from '../../../lib/csv'
 const amountFormat = new Intl.NumberFormat('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const moneyFormat = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' })
 const compactFormat = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', notation: 'compact', maximumFractionDigits: 1 })
@@ -37,12 +38,7 @@ export function csvAmount(cents: number): string {
 }
 
 export function toCsv(rows: (string | number)[][]): string {
-  return rows.map((row) => row.map((cell) => {
-    const text = String(cell)
-    // Prefix values that spreadsheet apps would run as formulas.
-    const safe = /^[=+\-@]/.test(text) && !/^-?\d/.test(text) ? `'${text}` : text
-    return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe
-  }).join(',')).join('\r\n')
+  return rows.map((row) => row.map(csvCell).join(',')).join('\r\n')
 }
 
 export function downloadCsv(fileName: string, rows: (string | number)[][]) {

@@ -19,7 +19,7 @@ export const accountSchema = z.object({
 }).strict()
 
 export const categorySchema = z.object({ ...common, accountType: types.optional() }).strict()
-export const versionSchema = z.coerce.number().int().min(1)
+export const versionSchema = z.union([z.number(), z.string().regex(/^[1-9]\d*$/)]).pipe(z.coerce.number().int().safe().min(1))
 
 export function listSchema(kind) {
   return z.object({

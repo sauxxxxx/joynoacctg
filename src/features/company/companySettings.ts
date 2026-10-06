@@ -34,7 +34,7 @@ const profile: SettingsConfig = {
       fields: [
         { key: 'tin', label: 'TIN', type: 'text', maxlength: 20, placeholder: '000-000-000-00000' },
         { key: 'birRegistrationDate', label: 'BIR Registration Date', type: 'date' },
-        { key: 'companyName', label: 'Company Name', type: 'text', required: true, full: true, maxlength: 200 },
+        { key: 'companyName', label: 'Company Name', type: 'text', required: true, full: true, maxlength: 120 },
         { key: 'formation', label: 'Formation', type: 'select', options: () => toOptions(['Sole Proprietorship', 'Partnership', 'Corporation', 'One Person Corporation', 'Cooperative']) },
         { key: 'natureOfBusiness', label: 'Nature Of Business', type: 'select', options: () => toOptions(['Service', 'Merchandising', 'Manufacturing', 'Mixed']) },
         { key: 'rdo', label: 'RDO', type: 'text', maxlength: 80, placeholder: 'e.g. 083 - Talisay-Minglanilla, Cebu' },

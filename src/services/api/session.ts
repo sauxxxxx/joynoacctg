@@ -9,8 +9,11 @@ export interface ApiCredentials {
 
 let credentials: ApiCredentials | null = null
 let expiredHandler: ((message: string) => void) | null = null
+const resetHandlers = new Set<() => void>()
+export function onSessionReset(handler: () => void) { resetHandlers.add(handler) }
 
 export function setApiCredentials(next: ApiCredentials | null) {
+  if (!next || (credentials && (credentials.companyId !== next.companyId || credentials.accessToken !== next.accessToken))) resetHandlers.forEach((handler) => handler())
   credentials = next
 }
 

@@ -56,14 +56,14 @@ const users$ = defineRecords<UserAccount>({
   plural: 'users',
   heading: 'Users',
   description: 'People who work in this accounting system and the role each one has.',
-  note: 'Sign-in is not connected yet, so these accounts do not grant access. Roles describe the intended permissions.',
   store: users,
   auditModule: 'Company',
-  empty: () => ({ username: '', email: '', name: '', roleId: '', active: true }),
+  empty: () => ({ username: '', email: '', name: '', roleId: '', active: true, password: '' }),
   fields: [
     { key: 'username', label: 'Username', type: 'text', required: true, maxlength: 254, hint: 'Usually the email address.' },
-    { key: 'email', label: 'Email', type: 'email', required: true, maxlength: 254 },
+    { key: 'email', label: 'Email', type: 'email', maxlength: 254 },
     { key: 'name', label: 'Name', type: 'text', required: true, full: true },
+    { key: 'password', label: 'Password', type: 'password', maxlength: 128, hint: '12–128 characters. Leave blank to keep the existing password.' },
     {
       key: 'roleId', label: 'Role', type: 'select', required: true,
       options: () => roles.value.map((role) => ({ value: role.id, label: role.active ? role.name : `${role.name} (inactive)`, disabled: !role.active })),
@@ -78,15 +78,17 @@ const users$ = defineRecords<UserAccount>({
   ],
   schema: z.object({
     username: z.string().trim().regex(/^[a-z0-9._@+-]{3,254}$/i, 'Username needs 3 or more letters, numbers, or . _ @ + - characters.'),
-    email: z.email('Enter a valid email address.'),
+    email: optionalEmail,
     name: required('Name'),
     roleId: required('Role'),
   }),
   validate: (draft, others) => {
-    if (duplicate(others, draft, 'email')) return 'Another user already has this email.'
+    if ((!draft.id || draft.password) && (String(draft.password ?? '').length < 12 || String(draft.password).length > 128)) return 'Choose a password of 12–128 characters.'
+    if (String(draft.email ?? '').trim() && duplicate(others, draft, 'email')) return 'Another user already has this email.'
     if (duplicate(others, draft, 'username')) return 'This username is taken.'
     return ''
   },
+  fromDraft: ({ password, ...draft }) => password ? { ...draft, password } : draft,
   label: (r) => String(r.name),
   searchText: (r) => `${r.username} ${r.email} ${r.name}`,
 })
@@ -152,7 +154,7 @@ const messageTemplates$ = defineRecords<MessageTemplate>({
   singular: 'message template',
   plural: 'message templates',
   description: 'Reusable wording for invoices, receipts, and reminders.',
-  note: 'Sending is not available yet (see Add-ons). Templates can be prepared and previewed now.',
+  note: 'Prepare and copy wording for your email or messaging app. Messages are not sent automatically.',
   store: messageTemplates,
   auditModule: 'Company',
   empty: () => ({ name: '', channel: 'Email', purpose: 'Invoice', subject: '', body: '', active: true }),
@@ -200,22 +202,22 @@ const series$ = defineRecords<DocumentSeries>({
   singular: 'series',
   plural: 'series',
   description: 'Numbering for company documents. One active series per document type.',
-  note: 'Series are kept here for reference. Sales documents still take a typed number until numbering rules are confirmed.',
+  note: 'Leave a new sales document number blank to assign it on save. Restarting series have a separate counter per year or month, beginning at the configured starting number. Typed source numbers are preserved.',
   store: documentSeries,
   auditModule: 'Company',
   empty: () => ({ documentType: '', prefix: '', nextNumber: 1, padding: 6, suffix: '', resetFrequency: 'Never', active: true }),
   fields: [
-    { key: 'documentType', label: 'Document type', type: 'select', required: true, options: () => toOptions(['Sales invoice', 'Collection receipt', 'Acknowledgement receipt', 'Journal voucher', 'Other']) },
+    { key: 'documentType', label: 'Document type', type: 'select', required: true, options: () => toOptions(['Sales invoice', 'Collection receipt', 'Acknowledgement receipt']) },
     { key: 'resetFrequency', label: 'Restart numbering', type: 'select', options: () => toOptions(['Never', 'Yearly', 'Monthly']) },
     { key: 'prefix', label: 'Prefix', type: 'text', maxlength: 20, placeholder: 'e.g. INV-{YYYY}-', hint: 'Tokens: {YYYY} {YY} {MM}' },
     { key: 'suffix', label: 'Suffix', type: 'text', maxlength: 20 },
-    { key: 'nextNumber', label: 'Next number', type: 'number', required: true, min: 1 },
+    { key: 'nextNumber', label: 'Next / starting number', type: 'number', required: true, min: 1, hint: 'Next number for Never; starting number for each new period when restarting.' },
     { key: 'padding', label: 'Digits', type: 'number', min: 1, max: 10, hint: 'Pads with leading zeros.' },
     { key: 'active', label: 'Active', type: 'checkbox' },
   ],
   columns: [
     { label: 'Document type', value: (r) => text(r, 'documentType'), strong: true },
-    { label: 'Next number', value: (r) => formatSeriesNumber(r as unknown as DocumentSeries) },
+    { label: 'Next / starting number', value: (r) => formatSeriesNumber(r as unknown as DocumentSeries) },
     { label: 'Restarts', value: (r) => text(r, 'resetFrequency') },
     { label: 'Active?', value: () => '', check: (r: AnyRecord) => Boolean(r.active) },
   ],
@@ -227,7 +229,7 @@ const series$ = defineRecords<DocumentSeries>({
   validate: (draft, others) => draft.active && others.some((r) => r.active && r.documentType === draft.documentType)
     ? `${draft.documentType} already has an active series. Deactivate it first.`
     : '',
-  preview: (draft) => ({ heading: 'Next document number', body: formatSeriesNumber({ prefix: String(draft.prefix ?? ''), suffix: String(draft.suffix ?? ''), nextNumber: Number(draft.nextNumber) || 1, padding: Math.min(10, Math.max(1, Number(draft.padding) || 1)) }) }),
+  preview: (draft) => ({ heading: draft.resetFrequency === 'Never' ? 'Next document number' : 'Starting number for a new period', body: formatSeriesNumber({ prefix: String(draft.prefix ?? ''), suffix: String(draft.suffix ?? ''), nextNumber: Number(draft.nextNumber) || 1, padding: Math.min(10, Math.max(1, Number(draft.padding) || 1)) }) }),
   label: (r) => `${r.documentType} series`,
   searchText: (r) => `${r.documentType} ${r.prefix} ${r.suffix}`,
 })
@@ -240,7 +242,7 @@ const reportTemplates$ = defineRecords({
   singular: 'report template',
   plural: 'report templates',
   description: 'Page setup and wording for printed accounting reports.',
-  note: 'Printed reports currently use the signatories from Company › Reporting. Templates will apply once the print layout supports them.',
+  note: 'The default template applies its page size, orientation, header, footer and signatory choice when printing the selected report.',
   store: reportTemplates,
   auditModule: 'Company',
   empty: () => ({ name: '', report: '', paperSize: 'A4', orientation: 'Portrait', headerText: '', footerText: '', showSignatories: true, isDefault: false }),

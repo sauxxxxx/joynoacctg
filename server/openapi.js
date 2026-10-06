@@ -1,3 +1,5 @@
+import { domainPaths } from './openapi/domainContracts.js'
+import { privatePaths } from './openapi/privateContracts.js'
 const reference = (name) => ({ $ref: `#/components/schemas/${name}` })
 const json = (schema) => ({ 'application/json': { schema } })
 const envelope = (schema) => ({ type: 'object', required: ['data', 'requestId'], properties: { data: schema, requestId: { type: 'string' } } })
@@ -55,7 +57,7 @@ const accountInput = { type: 'object', required: ['code', 'name', 'parentCode', 
 const categoryInput = { type: 'object', required: ['code', 'name'], properties: { ...common, accountType } }
 
 export const openapi = {
-  openapi: '3.1.0', info: { title: 'Joyno Local Accounting API', version: '0.1.0', description: 'Local foundation: authentication, company authorization, account categories, and accounts.' },
+  openapi: '3.1.0', info: { title: 'Joyno Accounting API', version: '0.1.0', description: 'Company-scoped accounting, journal posting, company administration and tax record tracking. Payroll calculation and official tax filing submission are outside the scope.' },
   servers: [{ url: '/api/v1' }], security: [{ bearerAuth: [] }],
   paths: {
     '/health': { get: { summary: 'Database health', security: [], responses: { 200: { description: 'Healthy', content: json(envelope({ type: 'object', properties: { status: { const: 'ok' }, service: { type: 'string' } } })) } } } },
@@ -63,6 +65,7 @@ export const openapi = {
       responses: { 200: { description: 'Session and active memberships', content: json(envelope(reference('Session'))) }, 429: errorResponse, ...failureResponses } } },
     '/auth/sign-out': { post: { summary: 'Revoke current session', tags: ['Authentication'], responses: { 200: { description: 'Signed out', content: json(envelope({ type: 'object', properties: { signedOut: { const: true } } })) }, ...failureResponses } } },
     ...resourcePaths('accounts', 'Account'), ...resourcePaths('account-categories', 'AccountCategory'),
+    ...domainPaths, ...privatePaths,
   },
   components: {
     securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer', description: 'Opaque access token returned by sign-in.' } },

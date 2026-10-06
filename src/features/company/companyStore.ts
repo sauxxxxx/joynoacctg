@@ -1,8 +1,10 @@
 import { computed, ref } from 'vue'
+import { isPreviewMode } from '../../services/api/config'
+import { onSessionReset } from '../../services/api/session'
 
 /**
- * Company module state. Frontend preview only: data lives in memory and resets when
- * the tab reloads, like the Sales pages. Replace with persistence when the backend lands.
+ * Company UI state. Normal sessions load persisted company-scoped API records;
+ * sample values are restricted to tests and all caches clear on session changes.
  */
 
 export interface CompanyProfile {
@@ -116,6 +118,7 @@ export type PermissionMatrix = Record<PermissionModule, Record<PermissionAction,
 
 export interface Role {
   id: string
+  version?: number
   name: string
   description: string
   active: boolean
@@ -125,6 +128,8 @@ export interface Role {
 
 export interface UserAccount {
   id: string
+  version?: number
+  password?: string
   username: string
   email: string
   name: string
@@ -202,6 +207,7 @@ export interface AddOn {
 
 export interface StoredDocument {
   id: string
+  version?: number
   name: string
   fileName: string
   size: number
@@ -210,8 +216,8 @@ export interface StoredDocument {
   reference: string
   notes: string
   uploadedAt: string
-  /** Object URL for the in-memory file. Revoked when the document is deleted. */
-  url: string
+  archived: boolean
+  sha256: string
 }
 
 export const companyProfile = ref<CompanyProfile>({
@@ -265,6 +271,8 @@ export const accountMappings = ref<AccountMapping[]>([
   mapping('Income Tax Payable', '', 'Account used for all income tax payable on sales'),
   mapping('VAT Payable', '202', 'Account used for all VAT payable on sales'),
   mapping('Cash', '101', 'Account for all cash transactions'),
+  mapping('Accounts Receivable', '', 'Amounts owed by customers'),
+  mapping('Accounts Payable', '', 'Amounts owed to vendors'),
   mapping('Revolving Cash Fund', '102', 'Default account for a revolving fund'),
   mapping('Creditable Input Tax', '114', 'Used to record the excess of input taxes (VAT from purchases)'),
   mapping('Prepaid Expenses', '113', 'Used to record expenses from vouchers without valid supporting documents'),
@@ -284,6 +292,7 @@ export const documentSeries = ref<DocumentSeries[]>([])
 export const reportTemplates = ref<ReportTemplate[]>([])
 export const auditEvents = ref<AuditEvent[]>([])
 export const storedDocuments = ref<StoredDocument[]>([])
+onSessionReset(() => { goods.value = []; services.value = []; otherItems.value = []; documentSeries.value = []; reportTemplates.value = []; storedDocuments.value = [] })
 
 export function emptyPermissions(value = false): PermissionMatrix {
   return Object.fromEntries(permissionModules.map((module) => [module, Object.fromEntries(permissionActions.map((action) => [action, value]))])) as PermissionMatrix
@@ -293,6 +302,10 @@ export function emptyPermissions(value = false): PermissionMatrix {
 export const roles = ref<Role[]>([
   { id: 'role-administrator', name: 'Administrator', description: 'Full access to every module.', active: true, system: true, permissions: emptyPermissions(true) },
 ])
+if (!isPreviewMode) {
+  roles.value = []
+  accountMappings.value = accountMappings.value.map((row) => ({ ...row, accountId: '' }))
+}
 
 export const addOns = ref<AddOn[]>([
   { id: 'bulk-invoice-import', name: 'Bulk invoice import', description: 'Create several sales invoices at once and exchange them with Excel.', module: 'Sales', available: true, enabled: true },
@@ -330,6 +343,7 @@ export function ownerFullName(owner: Pick<Owner, 'firstName' | 'middleName' | 'l
 export const currentActor = 'Preview session'
 
 export function recordAudit(module: string, action: string, reference: string, details = '') {
+  if (!isPreviewMode) return
   auditEvents.value = [
     { id: crypto.randomUUID(), at: new Date().toISOString(), user: currentActor, module, action, reference, details },
     ...auditEvents.value,

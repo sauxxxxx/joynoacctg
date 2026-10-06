@@ -7,6 +7,7 @@ export interface AuthUser {
   name: string
   role: string
   active: boolean
+  companyName?: string
   /** Permissions for the active company membership, as returned by the server. Preview users resolve them from Company › Roles. */
   permissions?: PermissionMatrix
 }

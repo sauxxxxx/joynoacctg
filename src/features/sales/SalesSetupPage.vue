@@ -4,6 +4,12 @@ import { Plus, Search } from '@lucide/vue'
 import { accountName } from '../accounting/setup/accountSetupData'
 import CheckMark from './CheckMark.vue'
 import SalesSetupForm from './SalesSetupForm.vue'
+import { salesSetupRepository } from '../../services/previewRepositories'
+import { useRecordWorkspace } from '../../services/useRecordWorkspace'
+import { useCollections } from '../../services/collectionStore'
+import { accountStore } from '../accounting/setup/accountSetupData'
+import { useAuth } from '../auth/authStore'
+import { usePermissions } from '../auth/permissions'
 import { tableAmount } from './salesFormat'
 import { setupRecords, type SetupKind, type SetupRecord } from './salesPreviewStore'
 import { frequencyLabel } from './salesRules'
@@ -19,6 +25,10 @@ const titles: Record<SetupKind, string> = {
 
 const query = ref('')
 const notice = ref('')
+const workspace = useRecordWorkspace(salesSetupRepository, setupRecords)
+const references = useCollections(accountStore)
+const { authUser } = useAuth()
+const { can } = usePermissions(authUser)
 // The form replaces the list, like the legacy full-page editors. `null` shows the list.
 const editor = ref<{ record: SetupRecord | null } | null>(null)
 watch(() => props.pageId, () => { editor.value = null; query.value = ''; notice.value = '' })
@@ -35,19 +45,22 @@ const columnCount = computed(() => ({ 'sales-payment-terms': 7, 'sales-payment-m
 function done(message: string) {
   editor.value = null
   notice.value = message
+  void workspace.load()
 }
 </script>
 
 <template>
   <SalesSetupForm v-if="editor" :key="editor.record?.id ?? 'new'" :kind="pageId" :record="editor.record" @close="editor = null" @saved="done" @deleted="done" />
   <section v-else class="sales-page" :aria-label="title">
+    <p v-if="workspace.loading.value || references.loading.value" role="status">Loading setup records…</p>
+    <p v-if="workspace.error.value || references.error.value" role="alert">{{ workspace.error.value || references.error.value }} <button type="button" @click="workspace.load(); references.retry()">Retry</button></p>
     <div v-if="notice" class="sales-notice" role="status">{{ notice }}</div>
     <div class="sales-panel">
       <div class="sales-panel__toolbar">
         <div><h2>{{ title }}</h2><p>Manage the options available on sales documents.</p></div>
         <div class="sales-panel__actions">
           <label class="sales-search"><Search :size="16" aria-hidden="true" /><input v-model="query" type="search" placeholder="Type to filter" :aria-label="`Search ${title}`" /></label>
-          <button class="sales-button sales-button--primary" type="button" @click="editor = { record: null }; notice = ''"><Plus :size="16" aria-hidden="true" /> Add {{ singular }}</button>
+          <button v-if="can('Sales', 'create')" class="sales-button sales-button--primary" type="button" :disabled="workspace.loading.value || references.loading.value || Boolean(references.error.value)" @click="editor = { record: null }; notice = ''"><Plus :size="16" aria-hidden="true" /> Add {{ singular }}</button>
         </div>
       </div>
       <div class="sales-table-wrap">
@@ -73,7 +86,7 @@ function done(message: string) {
                 <td class="sales-table__center"><CheckMark :value="item.allowOverride" label="Allow override" /></td><td>{{ accountName(item.accountId) }}</td>
               </template>
             </tr>
-            <tr v-if="!visibleRows.length" class="sales-table__empty-row">
+            <tr v-if="!workspace.loading.value && !workspace.error.value && !visibleRows.length" class="sales-table__empty-row">
               <td :colspan="columnCount"><strong>{{ rows.length ? 'No matching records' : 'No rows to show' }}</strong><span>{{ rows.length ? 'Try another search.' : `Add a ${singular} to get started.` }}</span></td>
             </tr>
           </tbody>

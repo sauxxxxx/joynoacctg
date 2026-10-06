@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { CalendarDays, LayoutGrid, ListFilter, Plus, Search } from '@lucide/vue'
+import { CalendarDays, Download, LayoutGrid, ListFilter, Plus, Search } from '@lucide/vue'
+import { exportPurchases } from './purchaseExports'
 import AppDatePicker from '../../components/ui/AppDatePicker.vue'
 import AppSelect from '../../components/ui/AppSelect.vue'
 import AppPagination from '../../components/ui/AppPagination.vue'
@@ -12,8 +13,16 @@ import PurchasesTable from './PurchasesTable.vue'
 import { purchaseConfigs, purchaseRecords, purchaseVendorName, type PurchaseKind, type PurchaseRecord } from './purchasePreviewData'
 import { purchaseSetupRecords } from './setup/purchaseSetupData'
 import './purchases.css'
+import { useRecordWorkspace } from '../../services/useRecordWorkspace'
+import { useDocumentReferences } from '../transactions/useDocumentReferences'
+import { useAuth } from '../auth/authStore'
+import { usePermissions } from '../auth/permissions'
 
 const props = defineProps<{ kind: PurchaseKind }>()
+const workspace = useRecordWorkspace(purchaseRepository, purchaseRecords)
+const references = useDocumentReferences('purchases')
+const { authUser } = useAuth()
+const { can } = usePermissions(authUser)
 const config = computed(() => purchaseConfigs[props.kind])
 const activeTab = ref('Search')
 const search = ref('')
@@ -52,7 +61,7 @@ const hasAppliedFilters = computed(() => isPayroll.value
 const visibleRecords = computed(() => {
   const query = search.value.trim().toLocaleLowerCase()
   return purchaseRecords.value.filter((record) => record.kind === props.kind)
-    .filter((record) => activeTab.value === 'Search' || (activeTab.value === 'Unpaid' ? record.paidCents < record.totalCents : record.status === 'Draft'))
+    .filter((record) => activeTab.value === 'Search' || (activeTab.value === 'Unpaid' ? record.status === 'Posted' && record.paidCents < record.totalCents : record.status === 'Draft'))
     .filter((record) => isPayroll.value ? record.year === applied.value.year : record.date >= applied.value.from && record.date <= applied.value.to && (!applied.value.vendor || record.vendorId === applied.value.vendor))
     .filter((record) => !query || [record.number, purchaseVendorName(record.vendorId), record.remarks, record.paymentMethod, record.status, record.period, record.payGroup].some((value) => value.toLocaleLowerCase().includes(query)))
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -92,9 +101,13 @@ onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', onOutsidePointer)
   document.removeEventListener('keydown', onFilterKeydown)
 })
-function openEditor(record: PurchaseRecord | null = null) { selectedRecord.value = record; editorOpen.value = true; notice.value = '' }
+function openEditor(record: PurchaseRecord | null = null) {
+  if (workspace.loading.value || workspace.busy.value || references.loading.value || references.error.value || (!record && !can('Purchases', 'create'))) return
+  selectedRecord.value = record; editorOpen.value = true; notice.value = ''
+}
 async function saveRecord(record: PurchaseRecord) {
-  await purchaseRepository.save(record)
+  if (!can('Purchases', selectedRecord.value ? 'edit' : 'create') || !await workspace.save(record)) return
+  editorOpen.value = false
   activeTab.value = 'Search'; search.value = ''
   if (!isPayroll.value) {
     if (record.date < applied.value.from) applied.value.from = record.date
@@ -102,18 +115,24 @@ async function saveRecord(record: PurchaseRecord) {
     fromDate.value = applied.value.from; toDate.value = applied.value.to
     vendor.value = ''; applied.value.vendor = ''
   } else { payrollYear.value = record.year; applied.value.year = record.year }
-  notice.value = `${record.number} saved as a temporary draft. Nothing was posted.`
+  notice.value = `${record.number} saved. Review and post it when ready.`
+  await workspace.load()
 }
 async function deleteRecord(record: PurchaseRecord) {
-  if (!await confirmAction({ title: 'Delete purchase draft?', message: `${record.number} will be permanently removed from this preview.`, confirmLabel: 'Delete draft', destructive: true })) return
-  await purchaseRepository.remove(record.id)
+  if (!can('Purchases', 'delete') || record.status !== 'Draft' || workspace.busy.value) return
+  if (!await confirmAction({ title: 'Delete purchase draft?', message: `${record.number} will be permanently removed.`, confirmLabel: 'Delete draft', destructive: true })) return
+  if (!await workspace.remove(record)) return
   editorOpen.value = false
   notice.value = `${record.number} draft deleted.`
+  await workspace.load()
 }
+function postedRecord(message: string) { editorOpen.value = false; notice.value = message; void workspace.load() }
 </script>
 
 <template>
   <section class="purchases-page" :aria-label="config.title">
+    <p v-if="workspace.loading.value || references.loading.value" role="status">Loading records…</p>
+    <p v-if="workspace.error.value || references.error.value" class="purchases-notice" role="alert">{{ workspace.error.value || references.error.value }} <button type="button" @click="workspace.load(); references.load()">Retry</button></p>
     <header class="purchases-toolbar">
       <nav class="purchases-tabs" :aria-label="`${config.title} views`"><button v-for="item in config.tabs" :key="item" type="button" :class="{ 'purchases-tabs__active': activeTab === item }" :aria-current="activeTab === item ? 'page' : undefined" @click="activeTab = item">{{ item }}</button></nav>
       <div class="purchases-toolbar__actions">
@@ -133,15 +152,16 @@ async function deleteRecord(record: PurchaseRecord) {
             </form>
           </aside>
         </div>
-        <button type="button" class="purchases-button purchases-button--primary" @click="openEditor()"><Plus :size="16" aria-hidden="true" />{{ newRecordLabel }}</button>
+        <button v-if="can('Purchases', 'create')" type="button" class="purchases-button purchases-button--primary" :disabled="workspace.loading.value || references.loading.value || Boolean(references.error.value)" @click="openEditor()"><Plus :size="16" aria-hidden="true" />{{ newRecordLabel }}</button>
+        <button type="button" class="purchases-button" :disabled="workspace.loading.value || references.loading.value || Boolean(workspace.error.value || references.error.value) || !visibleRecords.length" @click="exportPurchases(kind, visibleRecords)"><Download :size="16" aria-hidden="true" />Export CSV</button>
         <button type="button" class="purchases-icon-button" :aria-pressed="compact" aria-label="Toggle compact rows" @click="compact = !compact"><LayoutGrid :size="18" /></button>
       </div>
     </header>
     <p v-if="notice" class="purchases-notice" role="status">{{ notice }}</p>
     <div class="purchases-workspace" :class="{ 'purchases-workspace--compact': compact }">
-      <PurchasesTable :kind="kind" :records="pagedRecords" :filtered="filtered" @open="openEditor" @reset="resetFilters" @add="openEditor()" />
+      <PurchasesTable :kind="kind" :records="pagedRecords" :filtered="filtered" :can-create="can('Purchases', 'create')" @open="openEditor" @reset="resetFilters" @add="openEditor()" />
       <AppPagination v-model:page="currentPage" :page-size="pageSize" :total="visibleRecords.length" :label="config.title.toLocaleLowerCase()" />
     </div>
-    <PurchasesEditor :open="editorOpen" :kind="kind" :record="selectedRecord" @close="editorOpen = false" @save="saveRecord" @delete="deleteRecord" />
+    <PurchasesEditor :open="editorOpen" :kind="kind" :record="selectedRecord" :busy="workspace.busy.value" :server-error="workspace.error.value" :readonly="!can('Purchases', selectedRecord ? 'edit' : 'create')" :can-delete="can('Purchases', 'delete')" @close="editorOpen = false" @save="saveRecord" @delete="deleteRecord" @changed="postedRecord" />
   </section>
 </template>

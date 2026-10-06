@@ -1,0 +1,3 @@
+# Keep the previous application, but let it verify the upgraded password format.
+FROM joyno-accounting-api:verify-20261006-04
+COPY --chown=node:node server/security/passwords.js /app/server/security/passwords.js

@@ -3,8 +3,6 @@ import { computed, nextTick, ref } from 'vue'
 import { ArrowRight, Eye, EyeOff, LoaderCircle, LockKeyhole, UserRound } from '@lucide/vue'
 import BrandLogo from '../../components/BrandLogo.vue'
 import type { AuthCredentials } from './authTypes'
-import { previewCredentials } from './mockAuthService'
-import { isPreviewMode } from '../../services/api/config'
 import './auth.css'
 
 const props = defineProps<{ loading: boolean; error: string }>()
@@ -45,12 +43,6 @@ function updateCapsLock(event: KeyboardEvent) {
   capsLockOn.value = event.getModifierState('CapsLock')
 }
 
-function fillPreviewAccount() {
-  username.value = previewCredentials.username
-  password.value = previewCredentials.password
-  clearMessages()
-  nextTick(() => passwordInput.value?.focus())
-}
 
 async function submit() {
   clearMessages()
@@ -133,11 +125,6 @@ async function submit() {
             </button>
           </form>
 
-          <div v-if="isPreviewMode" class="login-preview-account">
-            <span>Preview access</span>
-            <p><strong>{{ previewCredentials.username }}</strong> / {{ previewCredentials.password }}</p>
-            <button type="button" @click="fillPreviewAccount">Use preview account</button>
-          </div>
 
           <p class="login-access__legal">JOYNO INC / Authorized personnel only</p>
         </div>

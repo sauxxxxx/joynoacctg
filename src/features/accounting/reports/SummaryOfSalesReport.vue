@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ReceiptText } from '@lucide/vue'
 import { customers } from '../../sales/customers/customerPreviewStore'
 import { salesDocuments } from '../../sales/salesPreviewStore'
@@ -10,17 +10,34 @@ import { describeRange, monthLabel } from './reportPeriods'
 import ReportFrame from './ReportFrame.vue'
 import { includedInvoices, summarizeSales, type SalesGrouping, type SalesSummaryRow } from './salesSummary'
 import { useReportPeriod } from './useReportPeriod'
+import { http } from '../../../services/api/httpClient'
+import type { EntityResponseDto } from '../../../contracts/dto'
+import { useAsyncResource } from '../../../lib/asyncState'
+import { getApiCredentials } from '../../../services/api/session'
+import { isPreviewMode } from '../../../services/api/config'
+import { companyProfile, reportingSettings, reportTemplates, type CompanyProfile, type ReportingSettings, type ReportTemplate } from '../../company/companyStore'
+import type { SalesDocument } from '../../sales/salesPreviewStore'
 
 const emit = defineEmits<{ navigate: [pageId: string] }>()
 const { range, defaultRange, presets } = useReportPeriod('year-to-date')
 const grouping = ref<SalesGrouping>('customer')
 const includeDrafts = ref(false)
+const resource = useAsyncResource({ load: async () => {
+  if (isPreviewMode) return { documents: salesDocuments.value, customers: customers.value }
+  const token = getApiCredentials()?.accessToken
+  const response = await http.get<EntityResponseDto<{ documents: SalesDocument[]; customers: { id: string; name: string }[]; profile: CompanyProfile; reporting: ReportingSettings; templates: ReportTemplate[] }>>('/sales-report-context')
+  if (token !== getApiCredentials()?.accessToken) throw new Error('Your session changed. Sign in again.')
+  companyProfile.value = response.data.profile; reportingSettings.value = response.data.reporting; reportTemplates.value = response.data.templates
+  return response.data
+} })
+onMounted(resource.run)
 
-const customerName = (id: string) => customers.value.find((customer) => customer.id === id)?.name ?? 'Unknown customer'
-const invoices = computed(() => includedInvoices(salesDocuments.value, range.value, includeDrafts.value))
+const documents = computed(() => resource.data.value?.documents ?? [])
+const customerName = (id: string) => resource.data.value?.customers.find((customer) => customer.id === id)?.name ?? 'Unknown customer'
+const invoices = computed(() => includedInvoices(documents.value.filter((item) => isPreviewMode || includeDrafts.value || Boolean(item.journalEntryId)), range.value, includeDrafts.value))
 const summary = computed(() => summarizeSales(invoices.value, grouping.value, (invoice) =>
   grouping.value === 'month' ? monthLabel(invoice.date.slice(0, 7), true) : customerName(invoice.customerId)))
-const hasInvoices = computed(() => salesDocuments.value.some((item) => item.kind === 'sales-invoices'))
+const hasInvoices = computed(() => documents.value.some((item) => item.kind === 'sales-invoices'))
 const period = computed(() => `For the period ${describeRange(range.value)}`)
 const groupLabel = computed(() => grouping.value === 'month' ? 'Month' : 'Customer')
 
@@ -39,9 +56,12 @@ function exportCsv() {
   <ReportFrame
     title="Summary of Sales"
     :period="period"
-    source-note="From Sales › Invoices entered in this tab. Includes Unpaid and Paid invoices (drafts optional, cancelled never). VAT and withholding are listed as entered and are not added to net sales."
+    source-note="Posted sales invoices in the selected period. Unposted invoices are optional; cancelled invoices are excluded. Net sales exclude recorded VAT."
+    :loading="resource.loading.value"
+    :error="resource.error.value"
     :can-export="summary.rows.length > 0"
     @export="exportCsv"
+    @retry="resource.run"
   >
     <template #filters>
       <div class="ws-field">
@@ -51,7 +71,7 @@ function exportCsv() {
           <button type="button" :aria-pressed="grouping === 'month'" @click="grouping = 'month'">Month</button>
         </div>
       </div>
-      <label class="ws-check"><input v-model="includeDrafts" type="checkbox" /> Include drafts</label>
+      <label class="ws-check"><input v-model="includeDrafts" type="checkbox" /> Include unposted invoices</label>
     </template>
     <template #date><DateRangeFilter v-model="range" :default-value="defaultRange" :presets="presets" /></template>
     <template v-if="summary.rows.length" #summary>
@@ -66,7 +86,7 @@ function exportCsv() {
     <div v-if="!hasInvoices" class="ws-empty">
       <span class="ws-empty__icon"><ReceiptText :size="22" aria-hidden="true" /></span>
       <strong>No sales invoices yet</strong>
-      <span>This report summarizes invoices from Sales › Invoices. Sales data is kept in this tab until the backend is connected.</span>
+      <span>Create an invoice in Sales › Invoices, then review and post it.</span>
       <button class="ws-button" type="button" @click="emit('navigate', 'sales-invoices')">Go to Invoices</button>
     </div>
     <div v-else-if="!summary.rows.length" class="ws-empty"><strong>No invoices in this period</strong><span>Try a wider date range, or include drafts.</span></div>

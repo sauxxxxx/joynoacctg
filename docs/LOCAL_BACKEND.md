@@ -1,8 +1,8 @@
 # Local backend
 
-The frontend preview continues to run with `npm.cmd run dev`. Leave `VITE_API_BASE_URL` unset while using preview mode. The backend is a separate Express service on port 3001; no frontend pages are switched to it automatically.
+The normal frontend runs with `npm.cmd run dev` and uses the VPS HTTPS API by default. The separate Express service on port 3001 is an isolated SQLite development option, not the VPS database. To point a local frontend at that service deliberately, set `JOYNO_API_PROXY_TARGET=http://127.0.0.1:3001` before starting Vite.
 
-## First slice available
+## Implemented backend
 
 - Health and OpenAPI documentation.
 - Username/email sign-in, hashed passwords, expiring opaque sessions, sign-out, and sign-in rate limiting.
@@ -10,11 +10,11 @@ The frontend preview continues to run with `npm.cmd run dev`. Leave `VITE_API_BA
 - Persistent account categories and accounts, UUIDs, pagination, search, active filtering, and sorting.
 - Version checks on updates/deletes; category hierarchy validation; audit records in the same transaction as each change.
 
-Other business modules are not implemented yet. Start journals and posting next, then sales/purchases, banking, assets, and reports. Government calculations need confirmed requirements before implementation.
+The API also includes company settings/access, typed records, journals/posting/voiding, financial reports/dashboard, customers/vendors, sales/purchase documents and allocations, transactional numbering, banking, fixed assets, tax/payroll registers, private database-backed files, posted books, and self-service profile/password controls. Tax/payroll scope is manual tracking and export, not calculation or official submission. OpenAPI is the implemented endpoint reference.
 
 ## Requirements
 
-Use Node 24.13 or later in the Node 24 line. This local slice uses Node's built-in `node:sqlite` module, which is still experimental in the installed runtime. Its database adapter is isolated under `server/db`; PostgreSQL/Supabase remains the intended later production database choice. SQLite is for this local development slice.
+Use Node 24.13 or later in the Node 24 line. SQLite uses Node's experimental `node:sqlite` module for isolated development. Database adapters are separated under `server/db`; PostgreSQL 17 on the existing Ubuntu KVM VPS is the deployed production database. Supabase is not used.
 
 ## Start the API
 
@@ -30,7 +30,7 @@ The database is created at `server/data/joyno.sqlite`, is ignored by Git, and su
 
 ## Create the first local company and administrator
 
-Bootstrap runs once on an empty database. Choose your own local credentials; the preview login is separate.
+Bootstrap runs once on an empty local database. These local credentials are separate from the existing VPS administrator.
 
 ```powershell
 $env:JOYNO_ADMIN_USERNAME = 'admin'
@@ -41,7 +41,7 @@ npm.cmd run api:bootstrap
 Remove-Item Env:\JOYNO_ADMIN_PASSWORD
 ```
 
-Do not rerun bootstrap to reset data. There is no public registration endpoint or user administration endpoint in this slice.
+Do not rerun bootstrap to reset data. There is no public registration endpoint. An authenticated administrator can manage users through Company › Users.
 
 ## API contract
 
@@ -65,7 +65,9 @@ Errors match `BACKEND_SPEC.md`, and the implemented DTOs match the existing acco
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `JOYNO_API_PORT` | `3001` | API port; binds to `127.0.0.1` |
+| `JOYNO_API_PORT` | `3001` | API port |
+| `JOYNO_API_HOST` | `127.0.0.1` | Listener; containers use `0.0.0.0` without a public port |
+| `JOYNO_DB_DRIVER` | `sqlite` | `sqlite` locally or `postgres` on Ubuntu |
 | `JOYNO_DB_PATH` | `server/data/joyno.sqlite` | Local database file |
 | `JOYNO_CORS_ORIGINS` | localhost and 127.0.0.1 on port 5173 | Comma-separated allowed browser origins |
 
@@ -81,3 +83,5 @@ npm.cmd run build
 ```
 
 Backend tests use isolated in-memory databases. They cover authentication failures, logout, expiry, deactivation, company isolation, read-only roles, CRUD/version conflicts, transaction rollback, hierarchy rules, and 105-row pagination.
+
+PostgreSQL schema/API tests also run with PGlite (embedded PostgreSQL). A native PostgreSQL pool/concurrency test runs only when `JOYNO_TEST_DATABASE_URL` is explicitly provided; otherwise it is skipped. See [KVM 4 deployment](KVM4_DEPLOYMENT.md). Existing SQLite files and local accounts are not automatically copied to PostgreSQL.

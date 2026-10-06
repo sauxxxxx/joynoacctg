@@ -1,0 +1,5 @@
+# Example only. Do not replace an existing VPS web-server configuration.
+# Set your real DNS hostname and adjust the upstream port if you change it.
+api.your-domain.example {
+  reverse_proxy 127.0.0.1:3001
+}

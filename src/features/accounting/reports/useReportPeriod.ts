@@ -1,12 +1,15 @@
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { fiscalYearStartMonth } from '../../company/companyStore'
 import { periodPresets, presetRange, todayIso, type IsoRange, type PeriodPreset } from './reportPeriods'
 
 /** Applied report period plus the default and presets the date filter offers. */
 export function useReportPeriod(initial: Exclude<PeriodPreset, 'custom'>) {
   const today = todayIso()
-  const defaultRange = presetRange(initial, today, fiscalYearStartMonth.value)
-  const range = ref<IsoRange>({ ...defaultRange })
+  const defaultRange = computed(() => presetRange(initial, today, fiscalYearStartMonth.value))
+  const range = ref<IsoRange>({ ...defaultRange.value })
+  watch(defaultRange, (next, previous) => {
+    if (range.value.from === previous.from && range.value.to === previous.to) range.value = { ...next }
+  })
   const presets = computed(() => periodPresets(today, fiscalYearStartMonth.value))
   return { range, defaultRange, presets }
 }

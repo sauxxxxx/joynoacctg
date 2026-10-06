@@ -5,6 +5,7 @@ import AppTopbar from './components/AppTopbar.vue'
 import AppConfirmDialog from './components/ui/AppConfirmDialog.vue'
 import type { JournalPreviewKind } from './features/accounting/journals/journalPreviewData'
 import LoginPage from './features/auth/LoginPage.vue'
+import { supportsWorkspacePage } from './services/api/config'
 import { useAuth } from './features/auth/authStore'
 import type { AuthCredentials } from './features/auth/authTypes'
 import type { PurchaseKind } from './features/purchases/purchasePreviewData'
@@ -22,7 +23,6 @@ import { canAccessPage, filterNavigation } from './features/auth/permissions'
 
 const DashboardPage = defineAsyncComponent(() => import('./features/dashboard/DashboardPage.vue'))
 const AccessDenied = defineAsyncComponent(() => import('./features/auth/AccessDenied.vue'))
-const PurchaseJournalPage = defineAsyncComponent(() => import('./features/accounting/journals/PurchaseJournalPage.vue'))
 const JournalPreviewPage = defineAsyncComponent(() => import('./features/accounting/journals/JournalPreviewPage.vue'))
 const AccountSetupPage = defineAsyncComponent(() => import('./features/accounting/setup/AccountSetupPage.vue'))
 const PurchasesPage = defineAsyncComponent(() => import('./features/purchases/PurchasesPage.vue'))
@@ -43,7 +43,8 @@ const SalesDocumentsPage = defineAsyncComponent(() => import('./features/sales/S
 const SalesReportsPage = defineAsyncComponent(() => import('./features/sales/SalesReportsPage.vue'))
 const SalesSetupPage = defineAsyncComponent(() => import('./features/sales/SalesSetupPage.vue'))
 
-const activeId = ref('dashboard')
+const landingPage = 'dashboard'
+const activeId = ref(landingPage)
 const { authUser, authenticating, authError, signIn, signOut, clearAuthError } = useAuth()
 const sidebarCollapsed = ref(false)
 const mobileOpen = ref(false)
@@ -57,7 +58,7 @@ const allowedPageIds = computed(() => {
   return ids
 })
 const hasPageAccess = computed(() => canAccessPage(authUser.value, activeId.value))
-const journalPreviewIds: JournalPreviewKind[] = ['cash-disbursement-journal', 'cash-receipt-journal', 'sales-journal', 'general-journal']
+const journalPreviewIds: JournalPreviewKind[] = ['cash-disbursement-journal', 'cash-receipt-journal', 'sales-journal', 'purchase-journal', 'general-journal']
 const journalPreviewId = computed(() => journalPreviewIds.find((id) => id === activeId.value))
 const purchaseIds: PurchaseKind[] = ['purchase-invoices', 'payrolls', 'cash-voucher', 'check-voucher', 'petty-cash-voucher', 'purchase-receipts']
 const purchasePageId = computed(() => purchaseIds.find((id) => id === activeId.value))
@@ -115,16 +116,17 @@ function selectPage(id: string) {
 
 function syncPageFromUrl() {
   const id = new URL(window.location.href).searchParams.get('page')
-  activeId.value = id && findPage(id) ? id : 'dashboard'
+  const fallback = authUser.value ? allowedPageIds.value.find(supportsWorkspacePage) ?? allowedPageIds.value[0] ?? landingPage : landingPage
+  activeId.value = id && findPage(id) ? id : fallback
 }
 
-function handleSignIn(credentials: AuthCredentials) {
-  void signIn(credentials)
+async function handleSignIn(credentials: AuthCredentials) {
+  if (await signIn(credentials)) syncPageFromUrl()
 }
 
 function handleSignOut() {
   signOut()
-  activeId.value = 'dashboard'
+  activeId.value = landingPage
   const url = new URL(window.location.href)
   url.searchParams.delete('page')
   window.history.replaceState(null, '', url)
@@ -175,10 +177,10 @@ onBeforeUnmount(() => {
             <h1>{{ activePage.label }}</h1>
           </div>
           <div class="page-content__canvas">
-            <AccessDenied v-if="!hasPageAccess" :page-name="activePage.label" @return="selectPage('dashboard')" />
+            <section v-if="!supportsWorkspacePage(activeId)" class="workspace-unavailable"><h2>This section is not available</h2><p>Please contact your administrator for assistance.</p><button type="button" @click="selectPage(landingPage)">Return</button></section>
+            <AccessDenied v-else-if="!hasPageAccess" :page-name="activePage.label" @return="selectPage(landingPage)" />
             <DashboardPage v-else-if="activeId === 'dashboard'" @navigate="selectPage" />
             <BirBooksPage v-else-if="activeId === 'bir-books'" />
-            <PurchaseJournalPage v-else-if="activeId === 'purchase-journal'" />
             <JournalPreviewPage v-else-if="journalPreviewId" :key="journalPreviewId" :kind="journalPreviewId" />
             <AccountSetupPage v-else-if="accountSetupPageId" :key="accountSetupPageId" :page-id="accountSetupPageId" />
             <PurchasesPage v-else-if="purchasePageId" :key="purchasePageId" :kind="purchasePageId" />

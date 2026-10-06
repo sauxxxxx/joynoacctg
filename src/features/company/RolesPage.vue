@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
-import { Check, Info, Lock, Plus, Search, Trash2, X } from '@lucide/vue'
+import { Check, Lock, Plus, Search, Trash2, X } from '@lucide/vue'
+import { errorMessage } from '../../services/api/errors'
+import { usePermissions } from '../auth/permissions'
+import { useAuth } from '../auth/authStore'
 import AppSelect from '../../components/ui/AppSelect.vue'
 import { roleRepository } from '../../services/previewRepositories'
 import {
@@ -11,6 +14,8 @@ import '../workspace/workspace.css'
 import './company.css'
 
 const clone = (role: Role): Role => JSON.parse(JSON.stringify(role))
+const permissions = usePermissions(useAuth().authUser)
+const canManage = computed(() => Boolean(permissions.currentRole.value?.system))
 const newRole = (): Role => ({ id: '', name: '', description: '', active: true, system: false, permissions: emptyPermissions() })
 
 const search = ref('')
@@ -18,6 +23,7 @@ const status = ref('active')
 const statusOptions = [{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }, { value: 'all', label: 'All roles' }]
 const draft = ref<Role>(newRole())
 const error = ref('')
+const busy = ref(false)
 const notice = ref('')
 const formDialog = ref<HTMLDialogElement | null>(null)
 const deleteDialog = ref<HTMLDialogElement | null>(null)
@@ -33,6 +39,7 @@ const visible = computed(() => {
 })
 
 function openForm(role?: Role) {
+  if (busy.value || (!role && !canManage.value)) return
   draft.value = role ? clone(role) : newRole()
   error.value = ''
   formDialog.value?.showModal()
@@ -52,19 +59,24 @@ function toggleRow(module: PermissionModule, value: boolean) {
 }
 
 async function save() {
+  if (busy.value || !canManage.value) return
   const name = draft.value.name.trim()
   if (!name) { error.value = 'Role name is required.'; return }
   if (roles.value.some((role) => role.id !== draft.value.id && role.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase())) { error.value = 'Another role has this name.'; return }
   if (draft.value.id && !draft.value.active && assigned(draft.value.id)) { error.value = 'Users still have this role. Assign them another role before deactivating it.'; return }
   const isNew = !draft.value.id
   const role: Role = { ...clone(draft.value), id: draft.value.id || crypto.randomUUID(), name, description: draft.value.description.trim() }
-  await roleRepository.save(role)
+  busy.value = true
+  try { await roleRepository.save(role) }
+  catch (cause) { error.value = errorMessage(cause, 'The role could not be saved.'); return }
+  finally { busy.value = false }
   recordAudit('Company', isNew ? 'Created' : 'Updated', `Role: ${role.name}`)
   notice.value = `${role.name} ${isNew ? 'added' : 'updated'}.`
   formDialog.value?.close()
 }
 
 function deleteFromForm() {
+  if (busy.value || !canManage.value) return
   const role = roles.value.find((item) => item.id === draft.value.id)
   if (!role) return
   if (role.system) { error.value = 'The Administrator role cannot be deleted.'; return }
@@ -76,9 +88,13 @@ function deleteFromForm() {
 }
 
 async function confirmDelete() {
+  if (busy.value || !canManage.value) return
   const role = pendingDelete.value
   if (!role) return
-  await roleRepository.remove(role.id)
+  busy.value = true
+  try { await roleRepository.remove(role.id, role.version) }
+  catch (cause) { error.value = errorMessage(cause, 'The role could not be deleted.'); return }
+  finally { busy.value = false }
   recordAudit('Company', 'Deleted', `Role: ${role.name}`)
   notice.value = `${role.name} deleted.`
   deleteDialog.value?.close()
@@ -88,7 +104,6 @@ async function confirmDelete() {
 <template>
   <section class="ws-page co-page" aria-label="Roles">
     <div class="ws-stack">
-      <p class="ws-note"><Info :size="14" aria-hidden="true" />Preview permissions shape navigation and actions. Backend authorization remains the security boundary.</p>
       <p v-if="notice" class="ws-notice" role="status">{{ notice }}</p>
       <div class="ws-panel ws-panel--clip">
         <div class="ws-panel__header">
@@ -96,7 +111,7 @@ async function confirmDelete() {
           <div class="ws-panel__actions">
             <label class="ws-search"><Search :size="16" aria-hidden="true" /><input v-model="search" type="search" placeholder="Type to filter" aria-label="Search roles" /></label>
             <div class="ws-toolbar__field"><AppSelect v-model="status" aria-label="Filter by status" :options="statusOptions" /></div>
-            <button class="ws-button ws-button--primary" type="button" @click="openForm()"><Plus :size="16" aria-hidden="true" /> Add role</button>
+            <button v-if="canManage" class="ws-button ws-button--primary" type="button" :disabled="busy" @click="openForm()"><Plus :size="16" aria-hidden="true" /> Add role</button>
           </div>
         </div>
         <table class="ws-table co-list">
@@ -114,10 +129,10 @@ async function confirmDelete() {
       </div>
     </div>
 
-    <dialog ref="formDialog" class="ws-dialog ws-dialog--wide" aria-labelledby="role-dialog-title">
+    <dialog ref="formDialog" class="ws-dialog ws-dialog--wide" aria-labelledby="role-dialog-title" @cancel="busy && $event.preventDefault()">
       <form novalidate @submit.prevent="save">
-        <div class="ws-dialog__header"><h2 id="role-dialog-title">{{ draft.id ? 'Edit role' : 'Add role' }}</h2><button class="ws-icon-button" type="button" aria-label="Close" @click="formDialog?.close()"><X :size="18" aria-hidden="true" /></button></div>
-        <div class="ws-dialog__body">
+        <div class="ws-dialog__header"><h2 id="role-dialog-title">{{ draft.id ? 'Edit role' : 'Add role' }}</h2><button class="ws-icon-button" type="button" :disabled="busy" aria-label="Close" @click="formDialog?.close()"><X :size="18" aria-hidden="true" /></button></div>
+        <fieldset class="ws-dialog__body" :disabled="busy || !canManage" style="margin: 0; border: 0; min-width: 0">
           <p v-if="locked" class="ws-note"><Lock :size="13" aria-hidden="true" />Built-in role with full access. Only the description can change.</p>
           <div class="ws-form">
             <label class="ws-field"><span>Name<em> *</em></span><input ref="nameInput" v-model="draft.name" maxlength="80" :disabled="locked" /></label>
@@ -139,19 +154,20 @@ async function confirmDelete() {
           </div>
           <p class="co-card__hint">Create, edit, and delete also turn on view.</p>
           <p v-if="error" class="ws-form-error" role="alert">{{ error }}</p>
-        </div>
+        </fieldset>
         <div class="ws-dialog__footer">
-          <button v-if="draft.id && !locked" class="ws-button co-button--ghost-danger" type="button" @click="deleteFromForm"><Trash2 :size="15" aria-hidden="true" /> Delete</button>
-          <button class="ws-button" type="button" @click="formDialog?.close()">Cancel</button>
-          <button class="ws-button ws-button--primary" type="submit">{{ draft.id ? 'Save changes' : 'Add role' }}</button>
+          <button v-if="draft.id && !locked && canManage" class="ws-button co-button--ghost-danger" type="button" :disabled="busy" @click="deleteFromForm"><Trash2 :size="15" aria-hidden="true" /> Delete</button>
+          <button class="ws-button" type="button" :disabled="busy" @click="formDialog?.close()">Cancel</button>
+          <button v-if="canManage" class="ws-button ws-button--primary" type="submit" :disabled="busy">{{ busy ? 'Saving…' : draft.id ? 'Save changes' : 'Add role' }}</button>
         </div>
       </form>
     </dialog>
 
-    <dialog ref="deleteDialog" class="ws-dialog ws-dialog--small" aria-label="Confirm deletion" @close="pendingDelete = null">
+    <dialog ref="deleteDialog" class="ws-dialog ws-dialog--small" aria-label="Confirm deletion" @cancel="busy && $event.preventDefault()" @close="pendingDelete = null">
       <div class="ws-dialog__header"><h2>Delete role?</h2></div>
       <div class="ws-dialog__body"><p>Remove <strong>{{ pendingDelete?.name }}</strong>? This cannot be undone.</p></div>
-      <div class="ws-dialog__footer"><button class="ws-button" type="button" @click="deleteDialog?.close()">Cancel</button><button class="ws-button ws-button--danger" type="button" @click="confirmDelete">Delete</button></div>
+      <p v-if="error" class="ws-form-error" role="alert">{{ error }}</p>
+      <div class="ws-dialog__footer"><button class="ws-button" type="button" :disabled="busy" @click="deleteDialog?.close()">Cancel</button><button class="ws-button ws-button--danger" type="button" :disabled="busy" @click="confirmDelete">Delete</button></div>
     </dialog>
   </section>
 </template>

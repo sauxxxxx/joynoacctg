@@ -1,0 +1,3 @@
+services:
+  api:
+    image: joyno-accounting-api:sources-rollback-schema4-20261006

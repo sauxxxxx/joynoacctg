@@ -5,7 +5,6 @@ import AppDatePicker from '../../components/ui/AppDatePicker.vue'
 import AppSelect from '../../components/ui/AppSelect.vue'
 import { decimalToCents } from '../../lib/money'
 import { salesDocumentRepository } from '../../services/previewRepositories'
-import { formatSeriesNumber } from '../company/companyRecords'
 import { documentSeries, recordAudit } from '../company/companyStore'
 import { customers } from './customers/customerPreviewStore'
 import QuickAddDialogs from './QuickAddDialogs.vue'
@@ -14,9 +13,17 @@ import { tableAmount } from './salesFormat'
 import { salesDocuments, setupRecords, type DocumentKind, type PaymentRow, type SalesDocument } from './salesPreviewStore'
 import { invoiceBalanceCents } from './salesRules'
 import './sales-pages.css'
+import { useSubmit } from '../../lib/useSubmit'
+import { useAuth } from '../auth/authStore'
+import { usePermissions } from '../auth/permissions'
+import SourceDocumentActions from '../transactions/SourceDocumentActions.vue'
 
 const props = defineProps<{ kind: Exclude<DocumentKind, 'sales-invoices'>; receipt: SalesDocument | null }>()
 const emit = defineEmits<{ close: []; saved: [message: string]; deleted: [message: string] }>()
+const mutation = useSubmit()
+const { authUser } = useAuth()
+const { can } = usePermissions(authUser)
+const readonly = computed(() => Boolean(props.receipt?.journalEntryId) || ['Posted', 'Cancelled'].includes(props.receipt?.status || '') || !can('Sales', props.receipt ? 'edit' : 'create'))
 
 const isAck = props.kind === 'acknowledgement-receipts'
 const label = isAck ? 'Acknowledgement Receipt' : 'Receipt'
@@ -28,7 +35,6 @@ const today = () => { const date = new Date(); return `${date.getFullYear()}-${p
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value))
 
 const series = computed(() => documentSeries.value.find((item) => item.active && item.documentType === seriesType))
-const suggestedNumber = props.receipt || !series.value ? '' : formatSeriesNumber(series.value, today())
 // Collection receipts default to Cash, as in the legacy form; acknowledgement receipts start blank.
 const defaultMethod = isAck ? '' : setupRecords.value.find((item) => item.kind === 'sales-payment-methods' && item.active && item.name.trim().toLocaleLowerCase() === 'cash')?.id ?? ''
 
@@ -37,7 +43,7 @@ type ReceiptDraft = Omit<SalesDocument, 'payments'> & { payments: PaymentDraft[]
 
 function blank(): ReceiptDraft {
   return {
-    id: '', kind: props.kind, number: suggestedNumber, date: today(), customerId: '', status: isAck ? 'Issued' : 'Posted',
+    id: '', kind: props.kind, number: '', date: today(), customerId: '', status: isAck ? 'Issued' : 'Draft',
     paymentTermId: '', paymentMethodId: defaultMethod, dueDate: '', amountCents: 0, remarks: '',
     customerDetails: { customerType: 'Company', company: '', tin: '', street: '', locality: '', country: 'Philippines', zipCode: '' },
     discountTypeId: '', discountRate: 0, discountAmountCents: 0, lines: [], payments: [], withInvoice: !isAck,
@@ -92,7 +98,7 @@ const errors = computed(() => {
   const value = draft.value
   const found: Record<string, string> = {}
   const number = value.number.trim()
-  if (!number) found.number = 'Cannot be blank'
+  if (!number && (value.id || !series.value)) found.number = 'Enter a number or configure an active series'
   else if (salesDocuments.value.some((doc) => doc.kind === props.kind && doc.id !== value.id && doc.number.trim().toLocaleLowerCase() === number.toLocaleLowerCase())) found.number = `${numberLabel.replace(' #', '')} number ${number} is already in use`
   if (!value.date) found.date = 'Cannot be blank'
   if (!customers.value.some((customer) => customer.id === value.customerId)) found.customerId = 'Choose a customer'
@@ -132,6 +138,7 @@ function chooseCustomer(id: string) {
 }
 
 async function save() {
+  if (readonly.value || mutation.pending.value) return
   submitted.value = true
   const first = Object.values(errors.value)[0] ?? Object.values(rowErrors.value)[0]
   saveError.value = first ? `Please fix the highlighted fields.` : ''
@@ -150,18 +157,15 @@ async function save() {
       others: showInvoiceColumn.value ? '' : row.others.trim(),
     })),
   }
-  await salesDocumentRepository.save(receipt)
-  const active = series.value
-  if (isNew && active && receipt.number === suggestedNumber) {
-    documentSeries.value = documentSeries.value.map((item) => item.id === active.id ? { ...item, nextNumber: item.nextNumber + 1 } : item)
-  }
+  if (!await mutation.run(async () => { Object.assign(receipt, await salesDocumentRepository.save(receipt)) })) return
   recordAudit('Sales', isNew ? 'Created' : 'Updated', `${label}: ${receipt.number}`, tableAmount(receipt.amountCents))
   emit('saved', `${label} ${receipt.number} ${isNew ? 'added' : 'updated'}.`)
 }
 
 async function remove() {
+  if (!props.receipt || props.receipt.status !== 'Draft' || !can('Sales', 'delete') || mutation.pending.value) return
   const number = draft.value.number
-  await salesDocumentRepository.remove(draft.value.id)
+  if (!await mutation.run(() => salesDocumentRepository.remove(draft.value.id, props.receipt?.version))) return
   recordAudit('Sales', 'Deleted', `${label}: ${number}`)
   deleteDialog.value?.close()
   emit('deleted', `${label} ${number} deleted.`)
@@ -169,13 +173,14 @@ async function remove() {
 </script>
 
 <template>
-  <SalesEditorShell :title="label" :subtitle="receipt ? receipt.number : `New ${label.toLocaleLowerCase()}`" :dirty="dirty" :error="saveError" :save-label="`Save ${label.toLocaleLowerCase()}`" @save="save" @close="emit('close')">
+  <SalesEditorShell :title="label" :subtitle="receipt ? receipt.number : `New ${label.toLocaleLowerCase()}`" :dirty="dirty" :error="saveError || mutation.error.value" :busy="mutation.pending.value" :readonly="readonly" :save-label="`Save ${label.toLocaleLowerCase()}`" @save="save" @close="emit('close')">
     <div class="sales-card">
       <h3 class="sales-card__title">Details</h3>
       <div class="sales-form sales-card__form">
         <label>{{ numberLabel }} <span>*</span>
           <input v-model="draft.number" maxlength="40" autocomplete="off" :aria-invalid="Boolean(shown('number'))" />
           <small v-if="shown('number')" class="sales-field-error">{{ shown('number') }}</small>
+          <small v-else-if="!receipt && series">Leave blank to assign a number on save.</small>
         </label>
         <div class="sales-field"><AppDatePicker id="receipt-date" v-model="draft.date" label="Date" required :invalid="Boolean(shown('date'))" /></div>
         <div class="sales-field-action">
@@ -227,7 +232,8 @@ async function remove() {
     </div>
 
     <template #extra-actions>
-      <button v-if="receipt" class="sales-button sales-button--ghost-danger" type="button" @click="deleteDialog?.showModal()"><Trash2 :size="15" aria-hidden="true" /> Delete</button>
+      <SourceDocumentActions v-if="receipt" :record="receipt" domain="sales-documents" @changed="emit('saved', $event)" />
+      <button v-if="receipt?.status === 'Draft' && can('Sales', 'delete')" class="sales-button sales-button--ghost-danger" type="button" :disabled="mutation.pending.value" @click="deleteDialog?.showModal()"><Trash2 :size="15" aria-hidden="true" /> Delete draft</button>
     </template>
   </SalesEditorShell>
 
@@ -236,6 +242,7 @@ async function remove() {
   <dialog ref="deleteDialog" class="sales-dialog sales-dialog--small" aria-label="Confirm deletion">
     <div class="sales-dialog__header"><h2>Delete {{ label.toLocaleLowerCase() }}?</h2></div>
     <p class="sales-dialog__body">Remove <strong>{{ draft.number }}</strong>? {{ isAck ? '' : 'The invoices it paid will show their balances again. ' }}This cannot be undone.</p>
-    <div class="sales-dialog__footer"><button class="sales-button" type="button" @click="deleteDialog?.close()">Cancel</button><button class="sales-button sales-button--danger" type="button" @click="remove">Delete</button></div>
+    <p v-if="mutation.error.value" role="alert">{{ mutation.error.value }}</p>
+    <div class="sales-dialog__footer"><button class="sales-button" type="button" :disabled="mutation.pending.value" @click="deleteDialog?.close()">Cancel</button><button class="sales-button sales-button--danger" type="button" :disabled="mutation.pending.value" @click="remove">Delete</button></div>
   </dialog>
 </template>

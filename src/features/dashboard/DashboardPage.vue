@@ -4,20 +4,24 @@ import { AlertCircle, ArrowRight, CalendarDays, FileClock, Landmark, RefreshCw, 
 import { useAsyncResource } from '../../lib/asyncState'
 import { formatMoney } from '../../lib/money'
 import type { DashboardDeadline } from './dashboardContract'
-import { previewDashboardService } from './previewDashboardService'
+import { http } from '../../services/api/httpClient'
+import type { EntityResponseDto } from '../../contracts/dto'
+import type { DashboardSnapshot } from './dashboardContract'
 import './dashboard.css'
 
 type CalendarCell = { key: string; day?: number; deadline?: DashboardDeadline }
 
 const emit = defineEmits<{ navigate: [id: string] }>()
-const resource = useAsyncResource({ load: () => previewDashboardService.load() })
+const resource = useAsyncResource({ load: async () => (await http.get<EntityResponseDto<DashboardSnapshot>>('/dashboard')).data })
+const balanceLabel = (value: number | null) => value === null ? 'Not set up' : `₱${formatMoney(value)}`
 const data = computed(() => resource.data.value)
 const maxTrend = computed(() => Math.max(1, ...(data.value?.trends.flatMap((row) => [row.revenueCents, row.expenseCents]) ?? [1])))
 const netResultCents = computed(() => (data.value?.revenueCents ?? 0) - (data.value?.expensesCents ?? 0))
+const hasPerformance = computed(() => Boolean(data.value?.revenueCents || data.value?.expensesCents))
 const revenueRatio = computed(() => {
-  const revenue = data.value?.revenueCents ?? 0
-  const total = revenue + (data.value?.expensesCents ?? 0)
-  return total > 0 ? revenue / total * 100 : 50
+  const revenue = Math.abs(data.value?.revenueCents ?? 0)
+  const total = revenue + Math.abs(data.value?.expensesCents ?? 0)
+  return total > 0 ? revenue / total * 100 : 0
 })
 const performanceStyle = computed(() => ({ '--revenue-width': `${revenueRatio.value}%` }))
 const month = new Intl.DateTimeFormat('en-PH', { month: 'short' })
@@ -75,7 +79,6 @@ onMounted(resource.run)
     <template v-else-if="data">
       <header class="dashboard__intro">
         <div><h1>Overview</h1><p>{{ data.companyName }} · Posted accounting activity and upcoming work</p></div>
-        <span class="dashboard__source">{{ data.sourceLabel }} · Preview</span>
       </header>
 
       <div class="dashboard__hero-grid">
@@ -119,24 +122,24 @@ onMounted(resource.run)
         <section class="dashboard-panel">
           <header class="dashboard-panel__header"><div><h2>Balance health</h2><p>Current posted position</p></div><Landmark :size="18" aria-hidden="true" /></header>
           <dl class="dashboard-balances">
-            <div><dt><Landmark :size="15" />Cash and bank</dt><dd>₱{{ formatMoney(data.bankBalanceCents) }}</dd></div>
-            <div><dt><TrendingUp :size="15" />Receivables</dt><dd>₱{{ formatMoney(data.receivablesCents) }}</dd></div>
-            <div><dt><Scale :size="15" />Payables</dt><dd>₱{{ formatMoney(data.payablesCents) }}</dd></div>
-            <div><dt><FileClock :size="15" />Unjournalized documents</dt><dd>{{ data.unjournalizedCount }}</dd></div>
+            <div><dt><Landmark :size="15" />Cash</dt><dd>{{ balanceLabel(data.bankBalanceCents) }}</dd></div>
+            <div><dt><TrendingUp :size="15" />Receivables</dt><dd>{{ balanceLabel(data.receivablesCents) }}</dd></div>
+            <div><dt><Scale :size="15" />Payables</dt><dd>{{ balanceLabel(data.payablesCents) }}</dd></div>
+            <div><dt><FileClock :size="15" />Draft journal entries</dt><dd>{{ data.unjournalizedCount }}</dd></div>
           </dl>
         </section>
 
         <section class="dashboard-panel dashboard-panel--performance">
           <header class="dashboard-panel__header"><div><h2>Operating result</h2><p>Income compared with expenses</p></div></header>
-          <div class="dashboard-result"><span>{{ netResultCents >= 0 ? 'Net income' : 'Net loss' }}</span><strong :class="{ 'is-negative': netResultCents < 0 }">₱{{ formatMoney(Math.abs(netResultCents)) }}</strong><small>{{ Math.round(revenueRatio) }}% of total posted activity is revenue</small></div>
-          <div class="dashboard-performance" :style="performanceStyle" role="img" :aria-label="`Revenue ${Math.round(revenueRatio)} percent and expenses ${Math.round(100 - revenueRatio)} percent`"><span /><i /></div>
-          <div class="dashboard-performance__legend"><span><i class="dashboard-key dashboard-key--revenue" />Revenue<strong>{{ Math.round(revenueRatio) }}%</strong></span><span><i class="dashboard-key dashboard-key--expense" />Expenses<strong>{{ Math.round(100 - revenueRatio) }}%</strong></span></div>
+          <div class="dashboard-result"><span>{{ netResultCents >= 0 ? 'Net income' : 'Net loss' }}</span><strong :class="{ 'is-negative': netResultCents < 0 }">₱{{ formatMoney(Math.abs(netResultCents)) }}</strong><small>{{ hasPerformance ? `${Math.round(revenueRatio)}% of the absolute income and expense totals is revenue` : 'No posted income or expenses yet.' }}</small></div>
+          <div v-if="hasPerformance" class="dashboard-performance" :style="performanceStyle" role="img" :aria-label="`Revenue ${Math.round(revenueRatio)} percent and expenses ${Math.round(100 - revenueRatio)} percent`"><span /><i /></div>
+          <div v-if="hasPerformance" class="dashboard-performance__legend"><span><i class="dashboard-key dashboard-key--revenue" />Revenue<strong>{{ Math.round(revenueRatio) }}%</strong></span><span><i class="dashboard-key dashboard-key--expense" />Expenses<strong>{{ Math.round(100 - revenueRatio) }}%</strong></span></div>
         </section>
 
         <section class="dashboard-panel dashboard-panel--activity">
           <header class="dashboard-panel__header"><div><h2>Recent activity</h2><p>Latest recorded changes</p></div></header>
           <ul v-if="data.activities.length" class="dashboard-activity"><li v-for="activity in data.activities.slice(0, 4)" :key="activity.id"><span class="dashboard-activity__mark" /><span><strong>{{ activity.action }} · {{ activity.reference }}</strong><small>{{ activity.module }} · {{ activityDate(activity.at) }}</small></span></li></ul>
-          <div v-else class="dashboard-panel__empty">No activity has been recorded in this preview session.</div>
+          <div v-else class="dashboard-panel__empty">No activity has been recorded yet.</div>
           <button class="dashboard-link dashboard-link--footer" type="button" @click="emit('navigate', 'audit-trail')">Audit trail <ArrowRight :size="14" /></button>
         </section>
       </div>

@@ -6,6 +6,7 @@ export type CertificateStatus = 'Draft' | 'Received' | 'Sent'
 
 export interface TaxCertificateRecord {
   id: string
+  version?: number
   formId: TaxCertificateId
   source: string
   party: string

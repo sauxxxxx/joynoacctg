@@ -1,6 +1,6 @@
 import { ApiFailure } from './errors.js'
 
-export function signInRateLimit() {
+export function signInRateLimit(message = 'Too many attempts. Try again in a minute.') {
   const attempts = new Map()
   const windowMs = 60_000
   return (req, res, next) => {
@@ -12,7 +12,7 @@ export function signInRateLimit() {
     attempts.set(key, entry)
     if (entry.count > 10) {
       res.set('Retry-After', String(Math.ceil((entry.resetAt - now) / 1000)))
-      return next(new ApiFailure('RATE_LIMITED', 429, 'Too many sign-in attempts. Try again in a minute.'))
+      return next(new ApiFailure('RATE_LIMITED', 429, message))
     }
     next()
   }

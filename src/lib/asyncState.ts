@@ -22,15 +22,19 @@ export function useAsyncResource<T>(options: AsyncResourceOptions<T>): AsyncReso
   const error = ref('')
   const status = ref<AsyncStatus>('idle')
   const loading = computed(() => status.value === 'loading')
+  let generation = 0
 
   async function run() {
+    const current = ++generation
     status.value = 'loading'
     error.value = ''
     try {
       const value = await options.load()
+      if (current !== generation) return
       data.value = value
       status.value = options.isEmpty?.(value) ? 'empty' : 'success'
     } catch (cause) {
+      if (current !== generation) return
       status.value = cause instanceof UnauthorizedError || (isApiError(cause) && cause.code === 'FORBIDDEN') ? 'unauthorized' : 'error'
       error.value = errorMessage(cause, options.errorMessage ?? 'The requested data could not be loaded.')
     }

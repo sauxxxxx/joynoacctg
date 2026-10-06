@@ -1,4 +1,5 @@
 import type { SalesDocument, SalesLineItem } from './salesPreviewStore'
+import { cloneRecord } from '../../services/repository'
 
 export interface SalesLineDraft {
   id: string
@@ -33,7 +34,7 @@ export function toSalesLineDraft(line: SalesLineItem): SalesLineDraft {
 
 export function toInvoiceDraft(invoice: SalesDocument): SalesInvoiceDraft {
   return {
-    ...structuredClone(invoice), lines: invoice.lines.map(toSalesLineDraft),
+    ...cloneRecord(invoice), lines: invoice.lines.map(toSalesLineDraft),
     discountInput: invoice.discountAmountCents ? pesos(invoice.discountAmountCents) : invoice.discountRate,
   }
 }

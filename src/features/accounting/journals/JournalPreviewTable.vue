@@ -10,6 +10,7 @@ const props = defineProps<{
   selectedIds: string[]
   reviewMode: boolean
   filtered: boolean
+  canCreate?: boolean
 }>()
 const emit = defineEmits<{
   toggle: [id: string]
@@ -60,10 +61,10 @@ const totalCents = computed(() => props.entries.reduce((sum, entry) => sum + ent
       <div v-if="!entries.length" class="journal-preview-empty" role="status">
         <strong>{{ filtered ? 'No matching journal entries' : 'No rows to show' }}</strong>
         <p v-if="kind === 'general-journal' && !filtered">No General Journal drafts on this page yet.</p>
-        <p v-else-if="!filtered">No journal records are connected yet.</p>
+        <p v-else-if="!filtered">No journal entries in this period.</p>
         <p v-else>Try another search term or date range.</p>
         <button v-if="filtered" class="journal-button journal-button--secondary" type="button" @click="emit('reset')">Reset filters</button>
-        <button v-else-if="kind === 'general-journal'" class="journal-button journal-button--secondary" type="button" @click="emit('add')">Add draft</button>
+        <button v-else-if="kind === 'general-journal' && canCreate" class="journal-button journal-button--secondary" type="button" @click="emit('add')">Add draft</button>
       </div>
       <div class="journal-preview-footer" role="status">
         <span><span class="journal-results__sr-only">Entries: </span>{{ entries.length }}</span>

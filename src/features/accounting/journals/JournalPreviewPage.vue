@@ -7,13 +7,23 @@ import GeneralJournalEditor from './GeneralJournalEditor.vue'
 import JournalPreviewDetail from './JournalPreviewDetail.vue'
 import JournalPreviewTable from './JournalPreviewTable.vue'
 import { journalPreviewConfigs, type JournalPreviewEntry, type JournalPreviewKind } from './journalPreviewData'
-import { journalBackend } from './journalStore'
+import { journalCollection } from './journalCollection'
+import { http } from '../../../services/api/httpClient'
+import { useCollections } from '../../../services/collectionStore'
+import { errorMessage } from '../../../services/api/errors'
+import { confirmAction } from '../../../services/dialogService'
+import { useAuth } from '../../auth/authStore'
+import { hasPermission } from '../../auth/permissions'
 import { sampleJournalRange } from './purchaseJournalData'
-import { generatedJournals, recordWorkflowAction, transitionJournalEntry } from '../workflows/accountingWorkflow'
 import './purchaseJournal.css'
 import './journalPreview.css'
 
 const props = defineProps<{ kind: JournalPreviewKind }>()
+const { loading, error: loadError, retry } = useCollections(journalCollection)
+const { authUser } = useAuth()
+const busy = ref(false)
+const saveError = ref('')
+const operationError = ref('')
 const config = computed(() => journalPreviewConfigs[props.kind])
 const initialRange = sampleJournalRange()
 const fromDate = ref(initialRange.from)
@@ -26,12 +36,11 @@ const filtersOpen = ref(false)
 const filterControl = ref<HTMLElement | null>(null)
 const filterButton = ref<HTMLButtonElement | null>(null)
 const selectedIds = ref<string[]>([])
-const drafts = ref<JournalPreviewEntry[]>([])
 const editorOpen = ref(false)
 const editingEntry = ref<JournalPreviewEntry | null>(null)
 const notice = ref('')
 const nextGeneralJournalNumber = computed(() => {
-  const numbers = [...journalBackend.all().filter((entry) => entry.kind === props.kind), ...drafts.value]
+  const numbers = journalCollection.items.value.filter((entry) => entry.kind === props.kind)
     .map((entry) => Number(entry.journalNumber))
     .filter(Number.isFinite)
   return String(Math.max(0, ...numbers) + 1)
@@ -44,7 +53,7 @@ const rangeSchema = z.object({
 
 const entries = computed(() => {
   const query = searchTerm.value.trim().toLocaleLowerCase()
-  return [...journalBackend.all().filter((entry) => entry.kind === props.kind), ...generatedJournals.value.filter((entry) => entry.kind === props.kind), ...drafts.value]
+  return journalCollection.items.value.filter((entry) => entry.kind === props.kind)
     .filter((entry) => entry.date >= appliedRange.value.from && entry.date <= appliedRange.value.to)
     .filter((entry) => !query || [entry.journalNumber, entry.referenceNumber, entry.party, entry.status, entry.remarks, entry.createdBy]
       .some((value) => value.toLocaleLowerCase().includes(query)))
@@ -120,14 +129,21 @@ function openEntry(entry: JournalPreviewEntry) {
 }
 
 function openEditor(entry: JournalPreviewEntry | null = null) {
+  if (busy.value || !hasPermission(authUser.value, 'Accounting', entry ? 'edit' : 'create')) return
   editingEntry.value = entry
   editorOpen.value = true
 }
 
-function saveDraft(entry: JournalPreviewEntry) {
-  const index = drafts.value.findIndex((draft) => draft.id === entry.id)
-  if (index >= 0) drafts.value.splice(index, 1, entry)
-  else drafts.value.push(entry)
+async function saveDraft(entry: JournalPreviewEntry) {
+  if (busy.value || !hasPermission(authUser.value, 'Accounting', editingEntry.value ? 'edit' : 'create')) return
+  busy.value = true
+  saveError.value = ''
+  try {
+    const saved = await journalCollection.save({ ...entry, id: editingEntry.value?.id ?? '', version: editingEntry.value?.version })
+    editorOpen.value = false
+    entry = saved
+  } catch (cause) { saveError.value = errorMessage(cause, 'The journal could not be saved.'); return }
+  finally { busy.value = false }
   if (entry.date < appliedRange.value.from) appliedRange.value.from = entry.date
   if (entry.date > appliedRange.value.to) appliedRange.value.to = entry.date
   fromDate.value = appliedRange.value.from
@@ -137,25 +153,35 @@ function saveDraft(entry: JournalPreviewEntry) {
   selectedIds.value = [entry.id]
 }
 
-function applyTransition(action: 'post' | 'void') {
-  if (!selectedIds.value.length) return
+async function applyTransition(action: 'post' | 'void') {
+  if (!selectedIds.value.length || busy.value) return
+  if (!hasPermission(authUser.value, 'Accounting', 'edit')) return
+  if (action === 'void' && !await confirmAction({ title: 'Void selected journal entries?', message: 'These posted entries will no longer affect reports. Their original lines and audit history will be retained.', confirmLabel: 'Void entries', destructive: true })) return
+  busy.value = true
+  operationError.value = ''
   try {
-    const selected = new Set(selectedIds.value)
-    drafts.value = drafts.value.map((entry) => selected.has(entry.id) ? transitionJournalEntry(entry, action) : entry)
-    notice.value = `${selected.size} journal ${selected.size === 1 ? 'entry' : 'entries'} ${action === 'post' ? 'posted' : 'voided'}.`
+    const selected = entries.value.filter((entry) => selectedIds.value.includes(entry.id))
+    await http.post('/journal-entries/transition', { action, entries: selected.map((entry) => ({ id: entry.id, expectedVersion: entry.version })) })
+    await journalCollection.reload()
+    notice.value = `Journal entry ${action === 'post' ? 'posted' : 'voided'}.`
     selectedIds.value = []
   } catch (error) {
-    notice.value = error instanceof Error ? error.message : 'The journal status could not be changed.'
-  }
+    operationError.value = errorMessage(error, 'The journal status could not be changed.')
+  } finally { busy.value = false }
 }
 
-const canPost = computed(() => selectedIds.value.length > 0 && selectedIds.value.every((id) => entries.value.find((entry) => entry.id === id)?.status === 'Draft'))
-const canVoid = computed(() => selectedIds.value.length > 0 && selectedIds.value.every((id) => entries.value.find((entry) => entry.id === id)?.status === 'Posted'))
+const canPost = computed(() => !busy.value && hasPermission(authUser.value, 'Accounting', 'edit') && selectedIds.value.length > 0 && selectedIds.value.every((id) => entries.value.find((entry) => entry.id === id)?.status === 'Draft'))
+const canVoid = computed(() => !busy.value && hasPermission(authUser.value, 'Accounting', 'edit') && selectedIds.value.length > 0 && selectedIds.value.every((id) => entries.value.find((entry) => entry.id === id)?.status === 'Posted'))
+async function removeDraft(entry: JournalPreviewEntry) {
+  if (busy.value || entry.status !== 'Draft' || !hasPermission(authUser.value, 'Accounting', 'delete')) return
+  if (!await confirmAction({ title: 'Delete journal draft?', message: `Journal draft #${entry.journalNumber} will be removed.`, confirmLabel: 'Delete draft', destructive: true })) return
+  busy.value = true; operationError.value = ''
+  try { await journalCollection.remove(entry.id, entry.version); selectedIds.value = []; notice.value = 'Journal draft deleted.' }
+  catch (cause) { operationError.value = errorMessage(cause, 'The draft could not be deleted.') }
+  finally { busy.value = false }
+}
 function transferSelected() {
-  const selected = entries.value.filter((entry) => selectedIds.value.includes(entry.id))
-  selected.forEach((entry) => recordWorkflowAction(entry, 'transferred', `${config.value.transferLabel} requested.`))
-  notice.value = `${selected.length} selected ${selected.length === 1 ? 'journal entry' : 'journal entries'} queued for transfer in this preview.`
-  selectedIds.value = []
+  notice.value = 'Use the source document to record a payment or collection.'
 }
 </script>
 
@@ -165,7 +191,6 @@ function transferSelected() {
       <div class="journal-page__toolbar-left">
         <h1 class="journal-page__title">{{ config.label }}</h1>
         <label class="journal-switch"><input v-model="reviewMode" type="checkbox" /><span class="journal-switch__track" aria-hidden="true" /><span>Review mode</span></label>
-        <span class="journal-page__preview">{{ kind === 'general-journal' ? 'Temporary drafts · Nothing is posted' : kind === 'cash-disbursement-journal' ? '2 reference samples · Nothing is saved' : 'Preview only · No records connected' }}</span>
       </div>
       <div class="journal-page__toolbar-right">
         <label class="journal-search"><Search :size="16" aria-hidden="true" /><input v-model="searchTerm" type="search" placeholder="Search journal entries..." :aria-label="`Search ${config.label.toLocaleLowerCase()} entries`" /></label>
@@ -189,17 +214,20 @@ function transferSelected() {
         <template v-if="kind === 'general-journal'">
           <button class="journal-button journal-button--secondary" type="button" :disabled="!canPost" @click="applyTransition('post')">Post</button>
           <button class="journal-button journal-button--secondary" type="button" :disabled="!canVoid" @click="applyTransition('void')">Void</button>
-          <button class="journal-button journal-button--secondary journal-preview__add" type="button" aria-label="Add General Journal draft" @click="openEditor()"><Plus :size="18" /></button>
+          <button v-if="hasPermission(authUser, 'Accounting', 'create')" class="journal-button journal-button--secondary journal-preview__add" type="button" aria-label="Add General Journal draft" :disabled="loading || busy || Boolean(loadError)" @click="openEditor()"><Plus :size="18" /></button>
         </template>
         <button v-else class="journal-button journal-button--primary" type="button" :disabled="!selectedIds.length" @click="transferSelected">{{ config.transferLabel }}</button>
       </div>
     </div>
     <p v-if="notice" class="journal-date-filter__notice" role="status">{{ notice }}</p>
-    <div class="journal-workarea journal-preview" :class="{ 'journal-workarea--review': reviewMode, 'journal-preview--review': reviewMode, 'journal-preview--general': kind === 'general-journal' }">
-      <JournalPreviewTable :kind="kind" :config="config" :entries="entries" :selected-ids="selectedIds" :review-mode="reviewMode" :filtered="filtered"
+    <p v-if="operationError" class="journal-date-filter__error" role="alert">{{ operationError }}</p>
+    <p v-if="loading" role="status">Loading journal entries…</p>
+    <div v-else-if="loadError" role="alert"><p>{{ loadError }}</p><button type="button" class="journal-button" @click="retry">Retry</button></div>
+    <div v-else class="journal-workarea journal-preview" :class="{ 'journal-workarea--review': reviewMode, 'journal-preview--review': reviewMode, 'journal-preview--general': kind === 'general-journal' }">
+      <JournalPreviewTable :kind="kind" :config="config" :entries="entries" :selected-ids="selectedIds" :review-mode="reviewMode" :filtered="filtered" :can-create="hasPermission(authUser, 'Accounting', 'create') && !busy"
         @toggle="toggleSelection" @toggle-all="toggleAll" @open="openEntry" @reset="resetFilters" @add="openEditor()" />
-      <JournalPreviewDetail v-if="reviewMode" :entry="activeEntry" :editable="kind === 'general-journal'" @edit="openEditor" />
+      <JournalPreviewDetail v-if="reviewMode" :entry="activeEntry" :editable="kind === 'general-journal' && hasPermission(authUser, 'Accounting', 'edit') && !busy" :can-delete="hasPermission(authUser, 'Accounting', 'delete') && !busy" @edit="openEditor" @delete="removeDraft" />
     </div>
-    <GeneralJournalEditor v-if="kind === 'general-journal'" :open="editorOpen" :entry="editingEntry" :next-journal-number="nextGeneralJournalNumber" @save="saveDraft" @close="editorOpen = false" />
+    <GeneralJournalEditor v-if="kind === 'general-journal'" :open="editorOpen" :entry="editingEntry" :next-journal-number="nextGeneralJournalNumber" :busy="busy" :server-error="saveError" @save="saveDraft" @close="editorOpen = false" />
   </section>
 </template>

@@ -1,0 +1,13 @@
+[Unit]
+Description=Joyno accounting health and backup checks
+After=docker.service nginx.service network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh /opt/joynoacctg/deploy/ubuntu/health-check.sh
+TimeoutStartSec=90
+UMask=0077
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+PrivateTmp=true

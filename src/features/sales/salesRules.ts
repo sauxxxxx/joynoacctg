@@ -87,7 +87,10 @@ export function frequencyLabel(term: Pick<SetupRecord, 'payments' | 'frequencyEv
 }
 
 export function lineAmountCents(line: Pick<SalesLineItem, 'quantity' | 'unitPriceCents'>): number {
-  return Math.round((Number(line.quantity) || 0) * (Number(line.unitPriceCents) || 0))
+  const scaled = Math.round((Number(line.quantity) || 0) * 1_000_000)
+  const cents = Number(line.unitPriceCents) || 0
+  if (!Number.isSafeInteger(scaled) || scaled < 0 || !Number.isSafeInteger(cents) || cents < 0) return 0
+  return Number((BigInt(scaled) * BigInt(cents) + 500_000n) / 1_000_000n)
 }
 
 export interface SalesFinancialLine {

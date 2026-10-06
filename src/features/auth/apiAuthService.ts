@@ -15,14 +15,21 @@ export const apiAuthService: AuthService = {
         throw new AuthenticationError('The username or password is incorrect.')
       }
       if (error instanceof ApiError && error.code === 'FORBIDDEN') throw new AuthenticationError('This account is inactive. Contact your system administrator.')
+      if (error instanceof ApiError && (error.code === 'NETWORK_ERROR' || (error.status ?? 0) >= 500)) {
+        throw new AuthenticationError('Unable to sign in right now. Please try again shortly or contact your administrator.')
+      }
+      if (error instanceof ApiError) throw new AuthenticationError(error.message)
       throw error
     }
     const membership = response.memberships[0]
     if (!membership) throw new AuthenticationError('This account is not assigned to a company. Contact your system administrator.')
     const expiresAt = Date.parse(response.expiresAt)
+    if (!response.accessToken || !membership.companyId || !response.user.active || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      throw new AuthenticationError('The server returned an invalid session. Please sign in again.')
+    }
     return {
-      user: { ...response.user, role: membership.role, permissions: membership.permissions as PermissionMatrix },
-      expiresAt: Number.isFinite(expiresAt) ? expiresAt : Date.now(),
+      user: { ...response.user, companyName: membership.companyName, role: membership.role, permissions: membership.permissions as PermissionMatrix },
+      expiresAt,
       accessToken: response.accessToken,
       companyId: membership.companyId,
     }
